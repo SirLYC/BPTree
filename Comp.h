@@ -12,7 +12,7 @@ template<typename K>
 using comparator = int (*)(const K &x, const K &y);
 
 template<typename K>
-int compare(K &x, K &y, comparator<K> comp) {
+int compare(const K &x, const K &y, const comparator<K> comp) {
     if (comp) {
         return comp(x, y);
     } else if (x > y) {
@@ -24,4 +24,4 @@ int compare(K &x, K &y, comparator<K> comp) {
     }
 }
 
-#endif //BPTREE_COMP_H
+#endif //BPTREE_UTILS_H

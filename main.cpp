@@ -1,20 +1,26 @@
 #include <iostream>
-#include <cstdlib>
 #include "BPTree.h"
 #include <map>
-#include "Test.h"
 
 using namespace std;
 
+int testBPTree();
+
 int main() {
-    testList();
+//    testList();
+    testBPTree();
     printf("***main finished");
 }
 
 int testBPTree() {
+    BPTree<int, int> t(3);
+    for (int i = 0; i < 10; ++i) {
+        t.put(i, i);
+    }
+
     srand(static_cast<unsigned int>(time(nullptr)));
-    BPTree<int, int> tree(100);
-    int testCount = 100000;
+    BPTree<int, int> tree(500);
+    int testCount = 10000000;
     int *testKey = new int[testCount];
     int *textValue = new int[testCount];
     for (int i = 0; i < testCount; ++i) {

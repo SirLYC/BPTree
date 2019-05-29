@@ -6,8 +6,8 @@
 #define BPTREE_BPTREE_H
 
 #include <algorithm>
-#include <vector>
 #include "Comp.h"
+#include "List.h"
 
 static const int minOrder = 2;
 
@@ -23,20 +23,20 @@ private:
         int initCap;
         int minLoad;
         bool leaf;
-        std::vector<Node *> childNodePtrs;
-        std::vector<V> values;
-        std::vector<K> keys;
+        List<Node *> childNodePtrs;
+        List<V> values;
+        List<K> keys;
 
         Node(int order, int initCap, bool leaf) :
                 order(order),
                 initCap(initCap),
                 minLoad((order + 1) / 2),
                 leaf(leaf) {
-            childNodePtrs.reserve(static_cast<unsigned long>(initCap));
+            childNodePtrs.reserve(initCap);
             if (leaf) {
-                values.reserve(static_cast<unsigned long>(initCap));
+                values.reserve(initCap);
             } else {
-                keys.reserve(static_cast<unsigned long>(initCap));
+                keys.reserve(initCap);
             }
         };
 
@@ -52,94 +52,9 @@ private:
 
     Node *getNodeByKey(K key);
 
-    inline int compare(const K &x, const K &y) {
-        if (comp) {
-            return comp(x, y);
-        } else if (x > y) {
-            return 1;
-        } else if (x == y) {
-            return 0;
-        } else {
-            return -1;
-        }
-    }
+    bool putToNode(Node *nodePtr, const K &key, const V *value, Node *insertNodePtr);
 
-    int findKeyPosition(const std::vector<K> &keys, const K &val) {
-        if (keys.empty()) {
-            return 0;
-        }
-
-        int s = static_cast<int>(keys.size());
-        int high = s;
-        int low = 0;
-        int mid;
-        int toIndex = -1;
-        int c;
-
-        while (low < high) {
-            mid = (low + high) >> 1;
-            c = compare(val, keys[mid]);
-            if (c == 0) {
-                toIndex = mid;
-                break;
-            } else if (c > 0) {
-                low = mid + 1;
-            } else {
-                high = mid;
-            }
-        }
-
-        if (toIndex == -1) {
-            toIndex = low;
-        }
-        return toIndex;
-    }
-
-    bool putToNode(Node *node, const K &key, const V *value, Node *insertNode);
-
-    Node *split(Node *nodePtr) {
-        std::vector<K> &keys = nodePtr->keys;
-        if (keys.size() <= order) {
-            return NULL;
-        }
-
-        int mid = (static_cast<int>(keys.size()) + 1) / 2;
-        Node *parentPtr = nodePtr->parentPtr;
-        if (!parentPtr) {
-            parentPtr = new Node(order, initCap, false);
-            nodePtr->parentPtr = parentPtr;
-        }
-
-        auto keyBegin = keys.begin();
-        // split
-        Node *left = new Node(order, initCap, nodePtr->leaf);
-        Node *right = new Node(order, initCap, nodePtr->leaf);
-        std::vector<K> &leftKeys = left->keys;
-        std::vector<K> &rightKeys = right->keys;
-        leftKeys.assign(keyBegin, keyBegin + mid);
-        rightKeys.assign(keyBegin + mid, keys.end());
-        left->parentPtr = parentPtr;
-        right->parentPtr = parentPtr;
-        if (nodePtr->leaf) {
-            auto valueBegin = nodePtr->values.begin();
-            left->values.assign(valueBegin, valueBegin + mid);
-            right->values.assign(valueBegin + mid, nodePtr->values.end());
-            left->next = right;
-        } else {
-            auto nodeBegin = nodePtr->childNodePtrs.begin();
-            left->childNodePtrs.assign(nodeBegin, nodeBegin + mid);
-            right->childNodePtrs.assign(nodeBegin + mid, nodePtr->childNodePtrs.end());
-            for (Node *&n: left->childNodePtrs) {
-                n->parentPtr = left;
-            }
-            for (Node *&n: right->childNodePtrs) {
-                n->parentPtr = right;
-            }
-        }
-        putToNode(parentPtr, leftKeys[leftKeys.size() - 1], NULL, left);
-        putToNode(parentPtr, rightKeys[rightKeys.size() - 1], NULL, right);
-        return parentPtr;
-    }
+    Node *split(Node *nodePtr);
 
 public:
 
@@ -185,17 +100,17 @@ V *BPTree<K, V>::get(K key) {
     Node *curPtr = root;
     int pos;
     while (!curPtr->leaf) {
-        int s = static_cast<int>(curPtr->childNodePtrs.size());
-        const std::vector<K> constKeys = curPtr->keys;
-        pos = findKeyPosition(constKeys, key);
+        int s = curPtr->childNodePtrs.getSize();
+        List<K> constKeys = curPtr->keys;
+        pos = constKeys.binaryFind(key);
         if (pos == s) {
             pos--;
         }
         curPtr = curPtr->childNodePtrs[pos];
     }
-    const std::vector<K> constKeys = curPtr->keys;
-    pos = findKeyPosition(constKeys, key);
-    if (pos >= 0 && pos < curPtr->values.size() && compare(curPtr->keys[pos], key) == 0) {
+    const List<K> constKeys = curPtr->keys;
+    pos = constKeys.binaryFind(key);
+    if (pos >= 0 && pos < curPtr->values.getSize() && compare(curPtr->keys[pos], key, comp) == 0) {
         return &(curPtr->values[pos]);
     }
 
@@ -223,9 +138,9 @@ void BPTree<K, V>::putInner(const K &key, const V &value) {
     Node *insertNode = root;
     int pos = -1;
     while (!insertNode->leaf) {
-        int s = static_cast<int>(insertNode->childNodePtrs.size());
-        const std::vector<K> constKeys = insertNode->keys;
-        pos = findKeyPosition(constKeys, key);
+        int s = insertNode->childNodePtrs.getSize();
+        List<K> constKeys = insertNode->keys;
+        pos = constKeys.binaryFind(key);
         if (pos == s) {
             pos--;
         }
@@ -237,33 +152,30 @@ void BPTree<K, V>::putInner(const K &key, const V &value) {
 
     Node *tmp = insertNode->parentPtr;
     while (tmp) {
-        std::vector<K> &keys = tmp->keys;
+        List<K> &keys = tmp->keys;
         K oldKey = keys[pos];
-        if (pos >= 0 && pos < keys.size() && compare(oldKey, key) < 0) {
+        if (pos >= 0 && pos < keys.getSize() && compare(oldKey, key, comp) < 0) {
             keys[pos] = key;
-            if (pos == keys.size() - 1 && (tmp = tmp->parentPtr)) {
-                pos = findKeyPosition(tmp->keys, oldKey);
+            if (pos == keys.getSize() - 1 && (tmp = tmp->parentPtr)) {
+                pos = tmp->keys.binaryFind(oldKey);
                 continue;
             }
         }
         break;
     }
 
-    int s = static_cast<int>(insertNode->keys.size());
+    int s = insertNode->keys.getSize();
     if (result && s > order) {
         Node *node = insertNode;
         Node *splitParent;
         Node *p;
-        Node *deletePtr;
         do {
             p = node->parentPtr;
             splitParent = split(node);
-            deletePtr = node;
-            delete (deletePtr);
             if (splitParent != p) {
                 this->root = splitParent;
                 break;
-            } else if (splitParent->keys.size() > order) {
+            } else if (splitParent->keys.getSize() > order) {
                 node = splitParent;
             } else {
                 break;
@@ -273,11 +185,9 @@ void BPTree<K, V>::putInner(const K &key, const V &value) {
 }
 
 template<typename K, typename V>
-bool
-
-BPTree<K, V>::putToNode(BPTree::Node *nodePtr, const K &key, const V *value, BPTree::Node *insertNodePtr) {
-    int toIndex = findKeyPosition(nodePtr->keys, key);
-    bool present = toIndex < nodePtr->keys.size() && compare(key, nodePtr->keys[toIndex]) == 0;
+bool BPTree<K, V>::putToNode(BPTree::Node *nodePtr, const K &key, const V *value, BPTree::Node *insertNodePtr) {
+    int toIndex = nodePtr->keys.binaryFind(key);
+    bool present = toIndex < nodePtr->keys.getSize() && compare(key, nodePtr->keys[toIndex], comp) == 0;
 
     if (present) {
         if (nodePtr->leaf) {
@@ -287,15 +197,53 @@ BPTree<K, V>::putToNode(BPTree::Node *nodePtr, const K &key, const V *value, BPT
         }
         return false;
     } else {
-        nodePtr->keys.insert(nodePtr->keys.begin() + toIndex, key);
+        nodePtr->keys.insert(toIndex, key);
         if (nodePtr->leaf) {
-            nodePtr->values.insert(nodePtr->values.begin() + toIndex, *value);
+            nodePtr->values.insert(toIndex, *value);
         } else {
-            nodePtr->childNodePtrs.insert(nodePtr->childNodePtrs.begin() + toIndex, insertNodePtr);
+            nodePtr->childNodePtrs.insert(toIndex, insertNodePtr);
         }
     }
 
     return true;
+}
+
+template<typename K, typename V>
+typename BPTree<K, V>::Node *BPTree<K, V>::split(BPTree::Node *nodePtr) {
+    List<K> &keys = nodePtr->keys;
+    if (keys.getSize() <= order) {
+        return NULL;
+    }
+
+    int mid = (keys.getSize() + 1) / 2;
+    Node *parentPtr = nodePtr->parentPtr;
+    if (!parentPtr) {
+        parentPtr = new Node(order, initCap, false);
+        nodePtr->parentPtr = parentPtr;
+    }
+
+    // split
+    Node *left = new Node(order, initCap, nodePtr->leaf);
+    List<K> &leftKeys = left->keys;
+    List<K> &rightKeys = nodePtr->keys;
+    leftKeys.add(rightKeys, 0, mid);
+    rightKeys.removeRange(0, mid);
+    left->parentPtr = parentPtr;
+    if (nodePtr->leaf) {
+        left->values.add(nodePtr->values, 0, mid);
+        nodePtr->values.removeRange(0, mid);
+        left->next = nodePtr;
+    } else {
+        left->childNodePtrs.add(nodePtr->childNodePtrs, 0, mid);
+        nodePtr->childNodePtrs.removeRange(0, mid);
+        for (int i = 0, s = left->childNodePtrs.getSize(); i < s; ++i) {
+            Node *&n = left->childNodePtrs[i];
+            n->parentPtr = left;
+        }
+    }
+    putToNode(parentPtr, leftKeys[leftKeys.getSize() - 1], NULL, left);
+    putToNode(parentPtr, rightKeys[rightKeys.getSize() - 1], NULL, nodePtr);
+    return parentPtr;
 }
 
 

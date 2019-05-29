@@ -6,7 +6,7 @@
 #include "List.h"
 #include <vector>
 
-#define TEST_LIST_COUNT 1000000
+#define TEST_LIST_COUNT 100000
 
 using namespace std;
 
@@ -41,6 +41,30 @@ void testList() {
 
     for (int j = 0, p = s; j < 100; ++j, ++p) {
         assert(l.get(p) == l2.get(j));
+    }
+
+    for (int i = 0; i < 100; i++) {
+        l2.add(i);
+    }
+    l.insert(20, l2);
+
+    for (int j = 0, p = 20; j < 100; ++j, ++p) {
+        assert(l.get(p) == l2.get(j));
+    }
+
+    List<int> lCopy = l;
+    l.insert(100, l2, 0, 20);
+    assert(lCopy.getSize() + 20 == l.getSize());
+    for (int i = 0; i < 100; i++) {
+        assert(l[i] == lCopy[i]);
+    }
+
+    for (int i = 0, p = 100; i < 20; i++, p++) {
+        assert(l[p] == l2[i]);
+    }
+
+    for (int i = 120, p = 100, s = l.getSize(); i < s; i++, p++) {
+        assert(lCopy[p] == l[i]);
     }
 
     List<int> testTimeList;

@@ -31,7 +31,13 @@ public:
         }
     }
 
-    List(List &list) : List((const List &) list) {}
+    List(List &list) : comp(list.comp), cap(list.cap), size(list.size) {
+        values = (T *) malloc(byteSize(cap));
+        if (!values) {
+            throw "cannot malloc";
+        }
+        memcpy(values, list.values, byteSize(size));
+    }
 
     List(const List &list) : comp(list.comp), cap(list.cap), size(list.size) {
         values = (T *) malloc(byteSize(cap));
@@ -51,13 +57,23 @@ public:
 
     void add(const List<T> &another);
 
+    void add(const List<T> &another, int startIndex);
+
+    void add(const List<T> &another, int startIndex, int endIndex);
+
     void insert(int index, const T &value);
 
     void insert(int index, const List<T> &another);
 
+    // start: include
+    // end: exclude
+    void insert(int index, const List<T> &another, int startIndex, int count);
+
     void removeAt(int index);
 
     void removeRange(int start, int count);
+
+    int binaryFind(const T &val) const;
 
     bool remove(T &value);
 
@@ -77,7 +93,7 @@ public:
 
     void trimToSize();
 
-    inline void checkRange(int index);
+    inline void checkRange(const int index) const;
 
     inline size_t byteSize(int count);
 };
@@ -93,6 +109,11 @@ void List<T>::add(const T &value) {
 }
 
 template<typename T>
+void List<T>::add(const List<T> &another, int startIndex, int endIndex) {
+    insert(size, another, startIndex, endIndex);
+}
+
+template<typename T>
 void List<T>::insert(int index, const T &value) {
     if (size + 1 >= cap) {
         expandTo(cap << 1);
@@ -105,14 +126,32 @@ void List<T>::insert(int index, const T &value) {
 template<typename T>
 void List<T>::insert(int index, const List<T> &another) {
     int s = size;
+    int cap = this->cap;
     while ((s + another.size) >= cap) {
         cap <<= 1;
     }
-    expandTo(cap << 1);
+    expandTo(cap);
 
-    memmove(values + another.size, values + index, byteSize(size - index));
+    memmove(values + another.size + index, values + index, byteSize(size - index));
     memcpy(values + index, another.values, byteSize(another.size));
     size += another.size;
+}
+
+template<typename T>
+void List<T>::insert(int index, const List<T> &another, int startIndex, int count) {
+    if (count <= 0) return;
+    another.checkRange(startIndex);
+    another.checkRange(startIndex + count - 1);
+    int s = size + count;
+    int cap = this->cap;
+    while (s >= cap) {
+        cap <<= 1;
+    }
+    expandTo(cap);
+
+    memmove(values + count + index, values + index, byteSize(size - index));
+    memcpy(values + index, another.values, byteSize(count));
+    size = s;
 }
 
 template<typename T>
@@ -150,7 +189,7 @@ int List<T>::getSize() {
 }
 
 template<typename T>
-void List<T>::checkRange(int index) {
+void List<T>::checkRange(const int index) const {
     if (index < 0 || index >= size) {
         throw "index out of size";
     }
@@ -207,7 +246,7 @@ void List<T>::removeRange(int start, int count) {
 
 template<typename T>
 size_t List<T>::byteSize(int count) {
-    return count * sizeof(count);
+    return count * sizeof(T);
 }
 
 template<typename T>
@@ -220,6 +259,42 @@ template<typename T>
 const T &List<T>::operator[](int index) const {
     checkRange(index);
     return values[index];
+}
+
+template<typename T>
+void List<T>::add(const List<T> &another, int startIndex) {
+    add(another, startIndex, another.size - startIndex);
+}
+
+template<typename T>
+inline int List<T>::binaryFind(const T &val) const {
+    if (!size) {
+        return 0;
+    }
+
+    int high = size;
+    int low = 0;
+    int mid;
+    int toIndex = -1;
+    int c;
+
+    while (low < high) {
+        mid = (low + high) >> 1;
+        c = compare(val, values[mid], comp);
+        if (c == 0) {
+            toIndex = mid;
+            break;
+        } else if (c > 0) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+
+    if (toIndex == -1) {
+        toIndex = low;
+    }
+    return toIndex;
 }
 
 #endif //BPTREE_LIST_H
