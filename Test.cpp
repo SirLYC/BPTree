@@ -4,9 +4,13 @@
 
 #include "Test.h"
 #include "List.h"
+#include "BPTree.h"
 #include <vector>
+#include <cmath>
+#include <map>
 
 #define TEST_LIST_COUNT 100000
+#define TEST_BP_TREE_COUNT 5000
 
 using namespace std;
 
@@ -199,4 +203,128 @@ void runWithtime(Runnable runnable, char *msg) {
     runnable();
     clock_t end = clock();
     printf("%s : %fms", msg, 1000.0 * (end - start) / CLOCKS_PER_SEC);
+}
+
+static int randomComp(const void *a, const void *b) {
+    return (rand() & 1) ? 1 : -1;
+}
+
+void testBPTreeFunction() {
+    srand(static_cast<unsigned int>(time(nullptr)));
+    int *arr = new int[TEST_BP_TREE_COUNT];
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        arr[i] = i;
+    }
+    qsort(arr, TEST_BP_TREE_COUNT, sizeof(int), randomComp);
+
+    int order = static_cast<int>(log(TEST_BP_TREE_COUNT)) + 1;
+    BPTree<int, int> tree(order);
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.put(arr[i], i);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        assert(*(tree.get(arr[i])) == i);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT / 2; ++i) {
+        tree.remove(arr[i]);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT / 2; ++i) {
+        assert(!tree.get(arr[i]));
+    }
+
+    for (int i = TEST_BP_TREE_COUNT / 2 + 1; i < TEST_BP_TREE_COUNT; ++i) {
+        assert(*(tree.get(arr[i])) == i);
+    }
+    printf("bp tree function test passed!\n");
+}
+
+
+void testBPTreeSpeed() {
+    srand(static_cast<unsigned int>(time(nullptr)));
+
+
+    BPTree<int, int> tree(1000);
+    int *testKey = new int[TEST_BP_TREE_COUNT];
+    int *textValue = new int[TEST_BP_TREE_COUNT];
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        testKey[i] = rand();
+        textValue[i] = rand();
+    }
+
+
+    clock_t start = clock();
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.put(testKey[i], textValue[i]);
+    }
+    clock_t end = clock();
+    printf("bp tree insert use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    start = clock();
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.get(testKey[i]);
+    }
+    end = clock();
+    printf("bp tree access use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    start = clock();
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.remove(testKey[i]);
+    }
+    end = clock();
+    printf("bp tree remove use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    map<int, int> m;
+    start = clock();
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        m[testKey[i]] = textValue[i];
+    }
+    end = clock();
+    printf("stl map insert use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+
+    start = clock();
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        m[testKey[i]];
+    }
+    end = clock();
+    printf("stl map access use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    start = clock();
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        m.erase(testKey[i]);
+    }
+    end = clock();
+    printf("stl map remove use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    delete[]testKey;
+    delete[]textValue;
+}
+
+void testBPTreeMemory() {
+    srand(static_cast<unsigned int>(time(nullptr)));
+    BPTree<int, int> tree(1000);
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.put(i, i);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT / 2; ++i) {
+        tree.remove(i);
+    }
+
+    for (int i = TEST_BP_TREE_COUNT / 2 + 1; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.remove(i);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.put(i, i);
+    }
+
+
+    tree.clear();
+    tree.getSize();
 }

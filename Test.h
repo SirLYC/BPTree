@@ -13,6 +13,12 @@ using Runnable = void (*)();
 
 void testList();
 
+void testBPTreeFunction();
+
+void testBPTreeSpeed();
+
+void testBPTreeMemory();
+
 void runWithtime(Runnable runnable, char *msg);
 
 #endif //BPTREE_TEST_H

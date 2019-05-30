@@ -49,6 +49,7 @@ public:
 
     ~List() {
         free(values);
+        values = NULL;
     }
 
     void set(int index, const T &value);
@@ -90,6 +91,8 @@ public:
     void reserve(int cap);
 
     void clear();
+
+    inline void intelligentTrim();
 
     void trimToSize();
 
@@ -165,6 +168,7 @@ void List<T>::trimToSize() {
 template<typename T>
 void List<T>::clear() {
     size = 0;
+    intelligentTrim();
 }
 
 template<typename T>
@@ -200,6 +204,7 @@ void List<T>::removeAt(int index) {
     checkRange(index);
     memmove(values + index, values + index + 1, byteSize(size - index - 1));
     size--;
+    intelligentTrim();
 }
 
 template<typename T>
@@ -295,6 +300,13 @@ inline int List<T>::binaryFind(const T &val) const {
         toIndex = low;
     }
     return toIndex;
+}
+
+template<typename T>
+inline void List<T>::intelligentTrim() {
+    if (size < (cap >> 1)) {
+        trimToSize();
+    }
 }
 
 #endif //BPTREE_LIST_H
