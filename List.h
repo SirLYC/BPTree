@@ -12,7 +12,7 @@
 template<typename T>
 class List {
 private:
-    comparator<T> comp;
+    const comparator<T> comp;
     int cap{};
     int size = 0;
     T *values;
@@ -247,6 +247,7 @@ void List<T>::removeRange(int start, int count) {
     checkRange(endIndex);
     memmove(values + start, values + endIndex + 1, byteSize(size - endIndex - 1));
     size -= count;
+    intelligentTrim();
 }
 
 template<typename T>

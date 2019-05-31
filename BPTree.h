@@ -11,17 +11,20 @@
 
 #define MIN_ORDER 2
 
+template<typename K, typename V> using biApply = bool (*)(const K &, const V &);
+template<typename K, typename V> using biApplyIndex = bool (*)(int index, const K &, const V &);
+
 template<typename K, typename V>
 class BPTree {
 private:
 
     struct Node {
         Node *parentPtr = NULL;
+        Node *previous = NULL;
         Node *next = NULL;
 
         int order;
         int initCap;
-        int minLoad;
         bool leaf;
         List<Node *> childNodePtrs;
         List<V> values;
@@ -30,7 +33,6 @@ private:
         Node(int order, int initCap, bool leaf) :
                 order(order),
                 initCap(initCap),
-                minLoad((order + 1) / 2),
                 leaf(leaf) {
             childNodePtrs.reserve(initCap);
             if (leaf) {
@@ -50,8 +52,6 @@ private:
     int initCap = 0;
     Node *root;
 
-    Node *getNodeByKey(K key);
-
     bool putToNode(Node *nodePtr, const K &key, const V *value, Node *insertNodePtr);
 
     int deleteFromNode(Node *nodePtr, const K &key);
@@ -61,6 +61,10 @@ private:
     Node *fixNode(Node *nodePtr);
 
     Node *split(Node *nodePtr);
+
+    Node *getFirstLeaf();
+
+    Node *getLastLeaf();
 
     void clear(Node *node);
 
@@ -81,6 +85,11 @@ public:
                           this->initCap,
                           true)) {}
 
+    ~BPTree() {
+        clear(root);
+        delete root;
+    }
+
     // interface
     void put(const K &key, const V &value);
 
@@ -93,6 +102,14 @@ public:
     int getOrder();
 
     int getSize();
+
+    void foreach(biApply<K, V> func);
+
+    void foreachReverse(biApply<K, V> func);
+
+    void foreachIndex(biApplyIndex<K, V> func);
+
+    void foreachIndexReverse(biApplyIndex<K, V> func);
 
     void clear();
 };
@@ -160,11 +177,6 @@ V *BPTree<K, V>::get(K key) {
     }
 
     return NULL;
-}
-
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::getNodeByKey(K key) {
-    return nullptr;
 }
 
 template<typename K, typename V>
@@ -277,7 +289,12 @@ typename BPTree<K, V>::Node *BPTree<K, V>::split(BPTree::Node *nodePtr) {
     if (nodePtr->leaf) {
         left->values.add(nodePtr->values, 0, mid);
         nodePtr->values.removeRange(0, mid);
+        left->previous = nodePtr->previous;
+        nodePtr->previous = left;
         left->next = nodePtr;
+        if (left->previous) {
+            left->previous->next = left;
+        }
     } else {
         left->childNodePtrs.add(nodePtr->childNodePtrs, 0, mid);
         nodePtr->childNodePtrs.removeRange(0, mid);
@@ -311,7 +328,7 @@ int BPTree<K, V>::deleteFromNode(BPTree::Node *nodePtr, const K &key) {
 
 template<typename K, typename V>
 typename BPTree<K, V>::Node *BPTree<K, V>::fixNode(BPTree::Node *nodePtr) {
-    if (nodePtr->minLoad <= nodePtr->keys.getSize() || !nodePtr->parentPtr) {
+    if (minLoad <= nodePtr->keys.getSize() || !nodePtr->parentPtr) {
         return NULL;
     }
 
@@ -371,6 +388,10 @@ typename BPTree<K, V>::Node *BPTree<K, V>::fixNode(BPTree::Node *nodePtr) {
         nodePtr->keys.insert(0, sibling->keys);
         if (nodePtr->leaf) {
             nodePtr->values.insert(0, sibling->values);
+            if (sibling->previous) {
+                sibling->previous->next = nodePtr;
+            }
+            nodePtr->previous = sibling->previous;
         } else {
             nodePtr->childNodePtrs.insert(0, sibling->childNodePtrs);
             int s = sibling->childNodePtrs.getSize();
@@ -389,6 +410,10 @@ typename BPTree<K, V>::Node *BPTree<K, V>::fixNode(BPTree::Node *nodePtr) {
         sibling->keys.insert(0, nodePtr->keys);
         if (nodePtr->leaf) {
             sibling->values.insert(0, nodePtr->values);
+            if (nodePtr->previous) {
+                nodePtr->previous->next = sibling;
+            }
+            sibling->previous = nodePtr->previous;
         } else {
             sibling->childNodePtrs.insert(0, nodePtr->childNodePtrs);
             int s = nodePtr->childNodePtrs.getSize();
@@ -451,6 +476,7 @@ void BPTree<K, V>::clear() {
     if (size == 0)
         return;
     clear(root);
+    root->leaf = true;
     size = 0;
 }
 
@@ -474,6 +500,79 @@ bool BPTree<K, V>::containsKey(const K &key) {
     }
 
     return false;
+}
+
+template<typename K, typename V>
+void BPTree<K, V>::foreach(biApply<K, V> func) {
+    Node *node = getFirstLeaf();
+    while (node) {
+        for (int i = 0, s = node->values.getSize(); i < s; ++i) {
+            if (func(node->keys[i], node->values[i])) {
+                return;
+            }
+        }
+        node = node->next;
+    }
+}
+
+template<typename K, typename V>
+void BPTree<K, V>::foreachIndex(biApplyIndex<K, V> func) {
+    Node *node = getFirstLeaf();
+    int index = 0;
+    while (node) {
+        for (int i = 0, s = node->values.getSize(); i < s; ++i, index++) {
+            if (func(index, node->keys[i], node->values[i])) {
+                return;
+            }
+        }
+        node = node->next;
+    }
+}
+
+template<typename K, typename V>
+typename BPTree<K, V>::Node *BPTree<K, V>::getFirstLeaf() {
+    Node *node = root;
+    while (!node->leaf) {
+        node = node->childNodePtrs[0];
+    }
+    return node;
+}
+
+
+template<typename K, typename V>
+typename BPTree<K, V>::Node *BPTree<K, V>::getLastLeaf() {
+    Node *node = root;
+    while (!node->leaf) {
+        node = node->childNodePtrs[node->childNodePtrs.getSize() - 1];
+    }
+    return node;
+}
+
+template<typename K, typename V>
+void BPTree<K, V>::foreachReverse(biApply<K, V> func) {
+    Node *node = getLastLeaf();
+    while (node) {
+        for (int i = node->values.getSize() - 1; i >= 0; --i) {
+            if (func(node->keys[i], node->values[i])) {
+                return;
+            }
+        }
+        node = node->previous;
+    }
+}
+
+template<typename K, typename V>
+void BPTree<K, V>::foreachIndexReverse(biApplyIndex<K, V> func) {
+    Node *node = getLastLeaf();
+    int index = size - 1;
+    while (node) {
+        for (int i = node->values.getSize() - 1; i >= 0; --i, --index) {
+            if (func(index, node->keys[i], node->values[i])) {
+                return;
+            }
+        }
+        node = node->previous;
+    }
 }
 
 #endif //BPTREE_BPTREE_H

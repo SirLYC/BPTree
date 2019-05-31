@@ -10,7 +10,8 @@
 #include <map>
 
 #define TEST_LIST_COUNT 100000
-#define TEST_BP_TREE_COUNT 5000
+#define TEST_BP_TREE_FUNCTION_COUNT 100000
+#define TEST_BP_TREE_COUNT 10000000
 
 using namespace std;
 
@@ -139,14 +140,14 @@ void testList() {
     }
 
     start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 3; ++i) {
+    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
         testTimeList.removeAt(0);
     }
     end = clock();
     printf("list(front) remove half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
     start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 3; ++i) {
+    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
         v.erase(v.begin());
     }
     end = clock();
@@ -158,14 +159,14 @@ void testList() {
     }
 
     start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 3; ++i) {
+    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
         testTimeList.removeAt(testTimeList.getSize() - 1);
     }
     end = clock();
     printf("list(back) remove half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
     start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 3; ++i) {
+    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
         v.erase(v.begin() + v.size() - 1);
     }
     end = clock();
@@ -209,36 +210,105 @@ static int randomComp(const void *a, const void *b) {
     return (rand() & 1) ? 1 : -1;
 }
 
+int lastKey;
+int *nums;
+
+static bool foreachFunc(const int &key, const int &value) {
+    assert(nums[value] == key);
+    assert(key > lastKey);
+    lastKey = key;
+    return false;
+}
+
+static bool foreachReverseFunc(const int &key, const int &value) {
+    assert(nums[value] == key);
+    assert(key < lastKey);
+    lastKey = key;
+    return false;
+}
+
+static bool foreachIndexFunc(int index, const int &key, const int &value) {
+    assert(nums[value] == key);
+    assert(index == key);
+    assert(key > lastKey);
+    lastKey = key;
+    return false;
+}
+
+static bool foreachIndexReverseFunc(int index, const int &key, const int &value) {
+    assert(nums[value] == key);
+    assert(index == key);
+    assert(key < lastKey);
+    lastKey = key;
+    return false;
+}
+
+void testForeach(BPTree<int, int> &tree, int *n) {
+    nums = n;
+    lastKey = -1;
+    tree.foreach(foreachFunc);
+    lastKey = -1;
+    tree.foreachIndex(foreachIndexFunc);
+    lastKey = TEST_BP_TREE_FUNCTION_COUNT + 1;
+    tree.foreachReverse(foreachReverseFunc);
+    lastKey = TEST_BP_TREE_FUNCTION_COUNT + 1;
+    tree.foreachIndexReverse(foreachIndexReverseFunc);
+    nums = nullptr;
+}
+
 void testBPTreeFunction() {
     srand(static_cast<unsigned int>(time(nullptr)));
-    int *arr = new int[TEST_BP_TREE_COUNT];
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    int *arr = new int[TEST_BP_TREE_FUNCTION_COUNT];
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
         arr[i] = i;
     }
-    qsort(arr, TEST_BP_TREE_COUNT, sizeof(int), randomComp);
+    qsort(arr, TEST_BP_TREE_FUNCTION_COUNT, sizeof(int), randomComp);
 
-    int order = static_cast<int>(log(TEST_BP_TREE_COUNT)) + 1;
+    int order = static_cast<int>(log(TEST_BP_TREE_FUNCTION_COUNT)) + 1;
     BPTree<int, int> tree(order);
 
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
         tree.put(arr[i], i);
     }
 
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(tree.containsKey(arr[i]));
         assert(*(tree.get(arr[i])) == i);
     }
 
-    for (int i = 0; i < TEST_BP_TREE_COUNT / 2; ++i) {
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT / 2; ++i) {
         tree.remove(arr[i]);
     }
 
-    for (int i = 0; i < TEST_BP_TREE_COUNT / 2; ++i) {
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT / 2; ++i) {
+        assert(!tree.containsKey(arr[i]));
         assert(!tree.get(arr[i]));
     }
 
-    for (int i = TEST_BP_TREE_COUNT / 2 + 1; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = TEST_BP_TREE_FUNCTION_COUNT / 2 + 1; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(tree.containsKey(arr[i]));
         assert(*(tree.get(arr[i])) == i);
     }
+
+    tree.clear();
+
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(!tree.containsKey(arr[i]));
+        assert(!tree.get(arr[i]));
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        tree.put(arr[i], i);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(tree.containsKey(arr[i]));
+        assert(*(tree.get(arr[i])) == i);
+    }
+
+    testForeach(tree, arr);
+    delete[](arr);
+
     printf("bp tree function test passed!\n");
 }
 
@@ -308,23 +378,34 @@ void testBPTreeMemory() {
     srand(static_cast<unsigned int>(time(nullptr)));
     BPTree<int, int> tree(1000);
 
+    printf("start put...\n");
     for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
         tree.put(i, i);
     }
 
+    printf("start remove half...\n");
     for (int i = 0; i < TEST_BP_TREE_COUNT / 2; ++i) {
         tree.remove(i);
     }
 
+    printf("start remove half...\n");
     for (int i = TEST_BP_TREE_COUNT / 2 + 1; i < TEST_BP_TREE_COUNT; ++i) {
         tree.remove(i);
     }
 
+    printf("start put...\n");
     for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
         tree.put(i, i);
     }
 
-
+    printf("start clear...\n");
     tree.clear();
-    tree.getSize();
+
+    printf("start put...\n");
+    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+        tree.put(i, i);
+    }
+
+    printf("start clear...\n");
+    tree.clear();
 }
