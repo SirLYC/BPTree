@@ -15,9 +15,11 @@ void testList();
 
 void testBPTreeFunction();
 
-void testBPTreeSpeed();
+void testBPTreeSpeed(int testSpeedCount);
 
 void testBPTreeMemory();
+
+void testBPTreeSerial(int serialCount);
 
 void runWithtime(Runnable runnable, char *msg);
 

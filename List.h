@@ -84,7 +84,7 @@ public:
 
     T &get(int index);
 
-    int getSize();
+    int getSize() const;
 
     bool isEmpty();
 
@@ -188,7 +188,7 @@ T &List<T>::get(int index) {
 }
 
 template<typename T>
-int List<T>::getSize() {
+int List<T>::getSize() const {
     return size;
 }
 

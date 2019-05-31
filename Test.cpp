@@ -313,35 +313,34 @@ void testBPTreeFunction() {
 }
 
 
-void testBPTreeSpeed() {
+void testBPTreeSpeed(int testSpeedCount) {
+    printf("***Start test speed. Count=%d\n", testSpeedCount);
     srand(static_cast<unsigned int>(time(nullptr)));
-
-
-    BPTree<int, int> tree(1000);
-    int *testKey = new int[TEST_BP_TREE_COUNT];
-    int *textValue = new int[TEST_BP_TREE_COUNT];
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    BPTree<int, int> tree(static_cast<int>(pow(log(testSpeedCount), 2)));
+    int *testKey = new int[testSpeedCount];
+    int *textValue = new int[testSpeedCount];
+    for (int i = 0; i < testSpeedCount; ++i) {
         testKey[i] = rand();
         textValue[i] = rand();
     }
 
 
     clock_t start = clock();
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < testSpeedCount; ++i) {
         tree.put(testKey[i], textValue[i]);
     }
     clock_t end = clock();
     printf("bp tree insert use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
     start = clock();
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < testSpeedCount; ++i) {
         tree.get(testKey[i]);
     }
     end = clock();
     printf("bp tree access use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
     start = clock();
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < testSpeedCount; ++i) {
         tree.remove(testKey[i]);
     }
     end = clock();
@@ -349,7 +348,7 @@ void testBPTreeSpeed() {
 
     map<int, int> m;
     start = clock();
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < testSpeedCount; ++i) {
         m[testKey[i]] = textValue[i];
     }
     end = clock();
@@ -357,14 +356,14 @@ void testBPTreeSpeed() {
 
 
     start = clock();
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < testSpeedCount; ++i) {
         m[testKey[i]];
     }
     end = clock();
     printf("stl map access use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
     start = clock();
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+    for (int i = 0; i < testSpeedCount; ++i) {
         m.erase(testKey[i]);
     }
     end = clock();
@@ -372,6 +371,8 @@ void testBPTreeSpeed() {
 
     delete[]testKey;
     delete[]textValue;
+
+    printf("***End test speed.\n");
 }
 
 void testBPTreeMemory() {
@@ -393,19 +394,53 @@ void testBPTreeMemory() {
         tree.remove(i);
     }
 
-    printf("start put...\n");
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
-        tree.put(i, i);
+    for (int i = 1; i <= 5; ++i) {
+        printf("start put(%d)...\n", i);
+        for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
+            tree.put(i, i);
+        }
+        printf("start clear(%d)...\n", i);
+        tree.clear();
     }
+}
 
-    printf("start clear...\n");
-    tree.clear();
 
-    printf("start put...\n");
-    for (int i = 0; i < TEST_BP_TREE_COUNT; ++i) {
-        tree.put(i, i);
+void testBPTreeSerial(int serialCount) {
+    printf("**Start serial test. Count = %d\n", serialCount);
+    srand(static_cast<unsigned int>(time(nullptr)));
+    int *arr = new int[serialCount];
+    for (int i = 0; i < serialCount; ++i) {
+        arr[i] = i;
     }
+    qsort(arr, static_cast<size_t>(serialCount), sizeof(int), randomComp);
 
-    printf("start clear...\n");
-    tree.clear();
+    BPTree<int, int> tree(20);
+    for (int i = 0; i < serialCount; ++i) {
+        tree.put(arr[i], i);
+    }
+    string s = string("test.bpt");
+
+    clock_t start = clock();
+    tree.serialize(s);
+    clock_t end = clock();
+    printf("serialize use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    start = clock();
+    BPTree<int, int> dTree = BPTree<int, int>::deserialize(s);
+    end = clock();
+    printf("deserialize use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+
+    FILE *f = fopen("test.bpt", "r");
+    if (!f) {
+        fprintf(stderr, "cannot get serialized file size\n");
+    }
+    fseek(f, 0, SEEK_END);
+    printf("serialize file size: %ld bytes\n", ftell(f));
+    fclose(f);
+
+    for (int i = 0; i < serialCount; ++i) {
+        assert(*(dTree.get(arr[i])) == i);
+    }
+    remove("test.bpt");
+    printf("**End serial test.\n");
 }

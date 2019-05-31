@@ -3,4 +3,4 @@ project(BPTree)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(BPTree main.cpp List.h Comp.h Test.h Test.cpp)
+add_executable(BPTree main.cpp List.h Comp.h Test.h Test.cpp Utils.h)

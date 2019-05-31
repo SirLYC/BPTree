@@ -6,8 +6,10 @@
 #define BPTREE_BPTREE_H
 
 #include <algorithm>
+#include <string>
 #include "Comp.h"
 #include "List.h"
+#include "Utils.h"
 
 #define MIN_ORDER 2
 
@@ -17,21 +19,19 @@ template<typename K, typename V> using biApplyIndex = bool (*)(int index, const 
 template<typename K, typename V>
 class BPTree {
 private:
+    static const std::string SUFFIX;
 
     struct Node {
         Node *parentPtr = NULL;
         Node *previous = NULL;
         Node *next = NULL;
-
-        int order;
         int initCap;
         bool leaf;
         List<Node *> childNodePtrs;
         List<V> values;
         List<K> keys;
 
-        Node(int order, int initCap, bool leaf) :
-                order(order),
+        Node(int initCap, bool leaf) :
                 initCap(initCap),
                 leaf(leaf) {
             childNodePtrs.reserve(initCap);
@@ -68,6 +68,37 @@ private:
 
     void clear(Node *node);
 
+    // return node's offset
+    long serializeNode(const Node *node, FILE *f);
+
+    // ftell must be at the start offset of target node
+    Node *deserializeNode(FILE *f, Node *parentNode);
+
+    Node *getNextSibling(Node *node) {
+        if (!node) {
+            return NULL;
+        }
+        if (!node->parentPtr) {
+            return NULL;
+        }
+        K &key = node->keys[node->keys.getSize() - 1];
+        int pos = node->parentPtr->keys.binaryFind(key);
+        if (pos >= 0 && pos <= node->parentPtr->keys.getSize() && compare(key, node->parentPtr->keys[pos], comp) == 0) {
+            if (pos == node->parentPtr->keys.getSize() - 1) {
+                Node *parentSibling = getNextSibling(node->parentPtr);
+                if (parentSibling && !parentSibling->childNodePtrs.isEmpty()) {
+                    return parentSibling->childNodePtrs[0];
+                } else if (!parentSibling) {
+                    return NULL;
+                }
+            } else {
+                return node->parentPtr->childNodePtrs[pos + 1];
+            }
+        }
+
+        throw bp_tree_utils::stringFormat("the structure of the bp tree is not correct");
+    }
+
 public:
 
     explicit BPTree(int orders) : BPTree(orders, 0, NULL) {}
@@ -81,14 +112,17 @@ public:
             initCap(std::max(std::min(this->order,
                                       initCap), this->minLoad)),
             comp(comp),
-            root(new Node(this->order,
-                          this->initCap,
+            root(new Node(this->initCap,
                           true)) {}
 
     ~BPTree() {
         clear(root);
         delete root;
     }
+
+    static BPTree<K, V> deserialize(const std::string &path);
+
+    static BPTree<K, V> deserialize(const std::string &path, comparator<K> comp);
 
     // interface
     void put(const K &key, const V &value);
@@ -111,9 +145,14 @@ public:
 
     void foreachIndexReverse(biApplyIndex<K, V> func);
 
+    void serialize(std::string &path);
+
     void clear();
 };
 
+
+template<typename K, typename V>
+const std::string BPTree<K, V>::SUFFIX = ".bpt";
 
 template<typename K, typename V>
 void BPTree<K, V>::put(const K &key, const V &value) {
@@ -275,12 +314,12 @@ typename BPTree<K, V>::Node *BPTree<K, V>::split(BPTree::Node *nodePtr) {
     int mid = (keys.getSize() + 1) / 2;
     Node *parentPtr = nodePtr->parentPtr;
     if (!parentPtr) {
-        parentPtr = new Node(order, initCap, false);
+        parentPtr = new Node(initCap, false);
         nodePtr->parentPtr = parentPtr;
     }
 
     // split
-    Node *left = new Node(order, initCap, nodePtr->leaf);
+    Node *left = new Node(initCap, nodePtr->leaf);
     List<K> &leftKeys = left->keys;
     List<K> &rightKeys = nodePtr->keys;
     leftKeys.add(rightKeys, 0, mid);
@@ -574,5 +613,161 @@ void BPTree<K, V>::foreachIndexReverse(biApplyIndex<K, V> func) {
         node = node->previous;
     }
 }
+
+template<typename K, typename V>
+void BPTree<K, V>::serialize(std::string &path) {
+    if (!path.rfind(SUFFIX)) {
+        path += SUFFIX;
+    }
+    char *cPath = const_cast<char *>(path.c_str());
+    FILE *f = bp_tree_utils::fopen(cPath, "w");
+
+    // head: tree info
+    bp_tree_utils::fwrite("LYC", 1, 4, f);
+    bp_tree_utils::writeVal(order, f);
+    bp_tree_utils::writeVal(initCap, f);
+    bp_tree_utils::writeVal(size, f);
+    if (size > 0) {
+        const BPTree::Node *constRoot = root;
+        serializeNode(constRoot, f);
+    }
+    fflush(f);
+    fclose(f);
+}
+
+template<typename K, typename V>
+long BPTree<K, V>::serializeNode(const BPTree::Node *node, FILE *f) {
+    long myOffset = ftell(f);
+
+    bp_tree_utils::writeVal<int>(node->leaf ? 1 : 0, f);
+    const List<K> &keys = node->keys;
+    int s = keys.getSize();
+    assert(s >= minLoad || !node->parentPtr);
+    bp_tree_utils::writeVal(s, f);
+    int kSize = sizeof(K);
+    bp_tree_utils::writeVal(kSize, f);
+    for (int i = 0; i < s; ++i) {
+        bp_tree_utils::writeVal(keys[i], f);
+    }
+
+    // leaf: write
+    if (node->leaf) {
+        bp_tree_utils::writeVal<int>(sizeof(V), f);
+        const List<V> &values = node->values;
+        for (int i = 0; i < s; ++i) {
+            bp_tree_utils::writeVal(values[i], f);
+        }
+    } else {
+        const List<Node *> &children = node->childNodePtrs;
+        long childPtrsStartOffset = ftell(f);
+        long *childOffsets = new long[s];
+        bp_tree_utils::fwrite(childOffsets, sizeof(long), s, f);
+        for (int i = 0; i < s; ++i) {
+            const Node *nPtr = children[i];
+            childOffsets[i] = serializeNode(nPtr, f);
+        }
+        long childEndOffset = ftell(f);
+        fseek(f, childPtrsStartOffset, SEEK_SET);
+        bp_tree_utils::fwrite(childOffsets, sizeof(long), s, f);
+        fseek(f, childEndOffset, SEEK_SET);
+        delete[](childOffsets);
+    }
+
+    return myOffset;
+}
+
+template<typename K, typename V>
+BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path) {
+    return deserialize(path, NULL);
+}
+
+template<typename K, typename V>
+BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path, comparator<K> comp) {
+    FILE *f = bp_tree_utils::fopen(path.c_str(), "r");
+    char buf[8];
+    bp_tree_utils::fread(buf, 1, 4, f);
+    if (buf[3] != 0) {
+        throw bp_tree_utils::stringFormat("Check file header failed: expected 0x00 but got %02x (offset: 3)", buf[3]);
+    }
+
+    if (strcmp(buf, "LYC") != 0) {
+        throw bp_tree_utils::stringFormat("Check file header failed: expected 'LYC' but got '%s' (offset: 0)", buf);
+    }
+
+    int order = bp_tree_utils::readVal<int>(f);
+    if (order < 2) {
+        throw bp_tree_utils::stringFormat("Wrong order: %d (offset: 4)", order);
+    }
+
+    int initCap = bp_tree_utils::readVal<int>(f);
+    if (initCap > order) {
+        throw bp_tree_utils::stringFormat("Wrong initCap: %d (offset: 8)", initCap);
+    }
+
+    int size = bp_tree_utils::readVal<int>(f);
+    if (size < 0) {
+        throw bp_tree_utils::stringFormat("Wrong size: %d (offset: 12)", initCap);
+    }
+    BPTree<K, V> tree = BPTree(order, initCap, comp);
+    tree.size = size;
+
+    if (size > 0) {
+        tree.root = tree.deserializeNode(f, NULL);
+        Node *pre = NULL;
+        Node *node = tree.getFirstLeaf();
+        while (node) {
+            node->previous = pre;
+            if (pre) {
+                pre->next = node;
+            }
+            pre = node;
+            node = tree.getNextSibling(node);
+        }
+    }
+    fclose(f);
+    return tree;
+}
+
+template<typename K, typename V>
+typename BPTree<K, V>::Node *BPTree<K, V>::deserializeNode(FILE *f, Node *parentNode) {
+    bool leaf = bp_tree_utils::readVal<int>(f) != 0;
+    int s = bp_tree_utils::readVal<int>(f);
+    if ((parentNode && s < minLoad) || s > order) {
+        throw bp_tree_utils::stringFormat("Illegal keys size: size: %d, order: %d(offset: %ld)",
+                                          s, order, ftell(f) - sizeof(int));
+    }
+    int kSize = bp_tree_utils::readVal<int>(f);
+    if (kSize != sizeof(K)) {
+        throw bp_tree_utils::stringFormat("Wrong sizeof(key): expected %d but got %d (offset: %ld)", sizeof(K), kSize,
+                                          ftell(f) - sizeof(int));
+    }
+    Node *node = new Node(initCap, leaf);
+    node->parentPtr = parentNode;
+    for (int i = 0; i < s; ++i) {
+        node->keys.add(bp_tree_utils::readVal<K>(f));
+    }
+    if (leaf) {
+        int vSize = bp_tree_utils::readVal<int>(f);
+        if (vSize != sizeof(V)) {
+            throw bp_tree_utils::stringFormat("Wrong key size: expected %d but got %d (offset: %ld)", sizeof(K), kSize,
+                                              ftell(f) - sizeof(int));
+        }
+        for (int i = 0; i < s; ++i) {
+            node->values.add(bp_tree_utils::readVal<V>(f));
+        }
+    } else {
+        long offset;
+        for (int i = 0; i < s; ++i) {
+            long childOffset = bp_tree_utils::readVal<long>(f);
+            offset = ftell(f);
+            fseek(f, childOffset, SEEK_SET);
+            node->childNodePtrs.add(deserializeNode(f, node));
+            fseek(f, offset, SEEK_SET);
+        }
+    }
+
+    return node;
+}
+
 
 #endif //BPTREE_BPTREE_H
