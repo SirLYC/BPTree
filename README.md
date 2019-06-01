@@ -1,5 +1,9 @@
 # B+树
 
+## 项目地址
+
+[https://github.com/SirLYC/BPTree](https://github.com/SirLYC/BPTree)
+
 ## 目标功能
 
 ### B+树简介
@@ -8,7 +12,7 @@
 
 ### B+树结构
 
-B+树有一个重要的参数叫`阶`(o)，决定了一颗B+树每一个节点存储关键子的个数。
+B+树有一个重要的参数叫`阶`(m)，决定了一颗B+树每一个节点存储关键子的个数。
 
 每一个节点都会按顺序存储一组关键字，对于非根节点，其关键字树s >= (m + 1) /2。对于叶子节点，其结构中存储指向值的指针，与关键字对应，同时还有一个next指针，指向下一个兄弟叶子节点，因此找到最左叶子节点后可以按关键字顺序遍历；对于非叶子节点，存有s个指向子节点的指针。
 
@@ -184,7 +188,7 @@ struct Node {
 - 尾删除测试
 - rangeRemove测试
 
-**测试运行结果：***
+**测试运行结果：**
 
 <center>
     <img style="border-radius: 0.3125em;
@@ -248,7 +252,7 @@ struct Node {
     <div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
     color: #999;
-    padding: 2px;">List速度测试结果</div>
+    padding: 2px;">B+树速度测试结果</div>
 </center>
 
 **表格：**
