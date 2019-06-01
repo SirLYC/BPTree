@@ -20,7 +20,7 @@ int main() {
     testBPTreeFunction();
 #endif
 #if TEST_SPEED
-    for (int i = 10000000; i >= 10000; i /= 10) {
+    for (int i = 100000000; i >= 1000000; i /= 10) {
         testBPTreeSpeed(i);
     }
 #endif
@@ -28,8 +28,12 @@ int main() {
     testBPTreeMemory();
 #endif
 #if TEST_SERIAL
-    for (int i = 10000000;; i /= 10) {
-        testBPTreeSerial(i);
+    for (int i = 1000000;; i /= 10) {
+        try {
+            testBPTreeSerial(i);
+        } catch (string &msg) {
+            cerr << msg << endl;
+        }
         if (!i) {
             break;
         }

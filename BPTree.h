@@ -31,16 +31,7 @@ private:
         List<V> values;
         List<K> keys;
 
-        Node(int initCap, bool leaf) :
-                initCap(initCap),
-                leaf(leaf) {
-            childNodePtrs.reserve(initCap);
-            if (leaf) {
-                values.reserve(initCap);
-            } else {
-                keys.reserve(initCap);
-            }
-        };
+        Node(int initCap, bool leaf);;
     };
 
     void putInner(const K &key, const V &value);
@@ -74,30 +65,10 @@ private:
     // ftell must be at the start offset of target node
     Node *deserializeNode(FILE *f, Node *parentNode);
 
-    Node *getNextSibling(Node *node) {
-        if (!node) {
-            return NULL;
-        }
-        if (!node->parentPtr) {
-            return NULL;
-        }
-        K &key = node->keys[node->keys.getSize() - 1];
-        int pos = node->parentPtr->keys.binaryFind(key);
-        if (pos >= 0 && pos <= node->parentPtr->keys.getSize() && compare(key, node->parentPtr->keys[pos], comp) == 0) {
-            if (pos == node->parentPtr->keys.getSize() - 1) {
-                Node *parentSibling = getNextSibling(node->parentPtr);
-                if (parentSibling && !parentSibling->childNodePtrs.isEmpty()) {
-                    return parentSibling->childNodePtrs[0];
-                } else if (!parentSibling) {
-                    return NULL;
-                }
-            } else {
-                return node->parentPtr->childNodePtrs[pos + 1];
-            }
-        }
-
-        throw bp_tree_utils::stringFormat("the structure of the bp tree is not correct");
-    }
+    /**
+     * @return NULL if this node is last node of its layer
+     */
+    Node *getNextSibling(Node *node);
 
 public:
 
@@ -115,21 +86,23 @@ public:
             root(new Node(this->initCap,
                           true)) {}
 
-    ~BPTree() {
-        clear(root);
-        delete root;
-    }
+    ~BPTree();
 
+    /**
+     * deserialize from a file
+     */
     static BPTree<K, V> deserialize(const std::string &path);
 
     static BPTree<K, V> deserialize(const std::string &path, comparator<K> comp);
 
-    // interface
     void put(const K &key, const V &value);
 
     void remove(K &key);
 
-    V *get(K key);
+    /**
+     * @return NULL if not exists else a pointer to the value
+     */
+    V *get(const K &key);
 
     bool containsKey(const K &key);
 
@@ -137,6 +110,10 @@ public:
 
     int getSize();
 
+    /**
+     * iterate order by key
+     * @param func call func(key, value) for each. func returns true means iteration ends
+     */
     void foreach(biApply<K, V> func);
 
     void foreachReverse(biApply<K, V> func);
@@ -147,8 +124,24 @@ public:
 
     void serialize(std::string &path);
 
+    /**
+     * clear the tree
+     * note that all values allocated will be freed
+     */
     void clear();
 };
+
+template<typename K, typename V>
+BPTree<K, V>::Node::Node(int initCap, bool leaf) :
+        initCap(initCap),
+        leaf(leaf) {
+    childNodePtrs.reserve(initCap);
+    if (leaf) {
+        values.reserve(initCap);
+    } else {
+        keys.reserve(initCap);
+    }
+}
 
 
 template<typename K, typename V>
@@ -197,7 +190,7 @@ void BPTree<K, V>::remove(K &key) {
 }
 
 template<typename K, typename V>
-V *BPTree<K, V>::get(K key) {
+V *BPTree<K, V>::get(const K &key) {
     Node *curPtr = root;
     int pos;
     while (!curPtr->leaf) {
@@ -617,7 +610,7 @@ void BPTree<K, V>::foreachIndexReverse(biApplyIndex<K, V> func) {
 template<typename K, typename V>
 void BPTree<K, V>::serialize(std::string &path) {
     if (!path.rfind(SUFFIX)) {
-        path += SUFFIX;
+        path = path += SUFFIX;
     }
     char *cPath = const_cast<char *>(path.c_str());
     FILE *f = bp_tree_utils::fopen(cPath, "w");
@@ -724,6 +717,28 @@ BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path, comparator<K> co
             node = tree.getNextSibling(node);
         }
     }
+
+    Node *node = tree.getFirstLeaf();
+    K *lastKey = NULL;
+    int count = 0;
+    int s;
+    while (node) {
+        s = node->values.getSize();
+        for (int i = 0; i < s; ++i) {
+            count++;
+            if (lastKey) {
+                const K &key = *lastKey;
+                if (compare(node->keys[i], key, comp) <= 0)
+                    throw std::string("invalid bp tree struct");
+            }
+            lastKey = &(node->keys[i]);
+        }
+        node = node->next;
+    }
+    if (count != size) {
+        throw bp_tree_utils::stringFormat("Wrong size: expected %d but got %d", size, count);
+    }
+
     fclose(f);
     return tree;
 }
@@ -767,6 +782,38 @@ typename BPTree<K, V>::Node *BPTree<K, V>::deserializeNode(FILE *f, Node *parent
     }
 
     return node;
+}
+
+template<typename K, typename V>
+BPTree<K, V>::~BPTree() {
+    clear(root);
+    delete root;
+}
+
+template<typename K, typename V>
+typename BPTree<K, V>::Node *BPTree<K, V>::getNextSibling(BPTree::Node *node) {
+    if (!node) {
+        return NULL;
+    }
+    if (!node->parentPtr) {
+        return NULL;
+    }
+    K &key = node->keys[node->keys.getSize() - 1];
+    int pos = node->parentPtr->keys.binaryFind(key);
+    if (pos >= 0 && pos <= node->parentPtr->keys.getSize() && compare(key, node->parentPtr->keys[pos], comp) == 0) {
+        if (pos == node->parentPtr->keys.getSize() - 1) {
+            Node *parentSibling = getNextSibling(node->parentPtr);
+            if (parentSibling && !parentSibling->childNodePtrs.isEmpty()) {
+                return parentSibling->childNodePtrs[0];
+            } else if (!parentSibling) {
+                return NULL;
+            }
+        } else {
+            return node->parentPtr->childNodePtrs[pos + 1];
+        }
+    }
+
+    throw bp_tree_utils::stringFormat("the structure of the bp tree is not correct");
 }
 
 

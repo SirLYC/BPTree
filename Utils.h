@@ -21,14 +21,14 @@ namespace bp_tree_utils {
     inline void fwrite(const void *ptr, size_t size, size_t nitems,
                        FILE *stream) {
         if (std::fwrite(ptr, size, nitems, stream) != nitems) {
-            throw "Write to file failed";
+            throw std::string("Write to file failed");
         }
     }
 
     inline void fread(void *ptr, size_t size, size_t nitems,
                       FILE *stream) {
         if (std::fread(ptr, size, nitems, stream) != nitems) {
-            throw "Read from file failed";
+            throw std::string("Read from file failed");
         }
     }
 

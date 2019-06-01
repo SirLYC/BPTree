@@ -290,6 +290,15 @@ void testBPTreeFunction() {
         assert(*(tree.get(arr[i])) == i);
     }
 
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        tree.put(arr[i], i);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(tree.containsKey(arr[i]));
+        assert(*(tree.get(arr[i])) == i);
+    }
+
     tree.clear();
 
     for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
