@@ -9,7 +9,6 @@
 #include <cstdarg>
 #include <cstdio>
 
-using Runnable = void (*)();
 
 void testList();
 
@@ -21,6 +20,7 @@ void testBPTreeMemory();
 
 void testBPTreeSerial(int serialCount);
 
-void runWithtime(Runnable runnable, char *msg);
+template<class Function>
+void runBlock(Function func, const char *msg);
 
 #endif //BPTREE_TEST_H

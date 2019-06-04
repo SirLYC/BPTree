@@ -91,9 +91,9 @@ public:
     /**
      * deserialize from a file
      */
-    static BPTree<K, V> deserialize(const std::string &path);
+    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path);
 
-    static BPTree<K, V> deserialize(const std::string &path, comparator<K> comp);
+    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path, comparator<K> comp);
 
     void put(const K &key, const V &value);
 
@@ -653,29 +653,28 @@ long BPTree<K, V>::serializeNode(const BPTree::Node *node, FILE *f) {
     } else {
         const List<Node *> &children = node->childNodePtrs;
         long childPtrsStartOffset = ftell(f);
-        long *childOffsets = new long[s];
-        bp_tree_utils::fwrite(childOffsets, sizeof(long), s, f);
+        std::unique_ptr<long[]> childOffsets(new long[s]);
+        bp_tree_utils::fwrite(childOffsets.get(), sizeof(long), s, f);
         for (int i = 0; i < s; ++i) {
             const Node *nPtr = children[i];
             childOffsets[i] = serializeNode(nPtr, f);
         }
         long childEndOffset = ftell(f);
         fseek(f, childPtrsStartOffset, SEEK_SET);
-        bp_tree_utils::fwrite(childOffsets, sizeof(long), s, f);
+        bp_tree_utils::fwrite(childOffsets.get(), sizeof(long), s, f);
         fseek(f, childEndOffset, SEEK_SET);
-        delete[](childOffsets);
     }
 
     return myOffset;
 }
 
 template<typename K, typename V>
-BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path) {
+std::shared_ptr<BPTree<K, V>> BPTree<K, V>::deserialize(const std::string &path) {
     return deserialize(path, NULL);
 }
 
 template<typename K, typename V>
-BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path, comparator<K> comp) {
+std::shared_ptr<BPTree<K, V>> BPTree<K, V>::deserialize(const std::string &path, comparator<K> comp) {
     FILE *f = bp_tree_utils::fopen(path.c_str(), "r");
     char buf[8];
     bp_tree_utils::fread(buf, 1, 4, f);
@@ -701,24 +700,24 @@ BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path, comparator<K> co
     if (size < 0) {
         throw bp_tree_utils::stringFormat("Wrong size: %d (offset: 12)", initCap);
     }
-    BPTree<K, V> tree = BPTree(order, initCap, comp);
-    tree.size = size;
+    std::shared_ptr<BPTree> treePtr(new BPTree(order, initCap, comp));
+    treePtr->size = size;
 
     if (size > 0) {
-        tree.root = tree.deserializeNode(f, NULL);
+        treePtr->root = treePtr->deserializeNode(f, NULL);
         Node *pre = NULL;
-        Node *node = tree.getFirstLeaf();
+        Node *node = treePtr->getFirstLeaf();
         while (node) {
             node->previous = pre;
             if (pre) {
                 pre->next = node;
             }
             pre = node;
-            node = tree.getNextSibling(node);
+            node = treePtr->getNextSibling(node);
         }
     }
 
-    Node *node = tree.getFirstLeaf();
+    Node *node = treePtr->getFirstLeaf();
     K *lastKey = NULL;
     int count = 0;
     int s;
@@ -740,7 +739,7 @@ BPTree<K, V> BPTree<K, V>::deserialize(const std::string &path, comparator<K> co
     }
 
     fclose(f);
-    return tree;
+    return treePtr;
 }
 
 template<typename K, typename V>

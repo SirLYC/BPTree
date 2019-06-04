@@ -15,8 +15,6 @@
 
 using namespace std;
 
-List<int> list;
-
 void testList() {
     srand(static_cast<unsigned int>(time(NULL)));
 
@@ -75,29 +73,26 @@ void testList() {
     List<int> testTimeList;
     vector<int> v;
 
-    clock_t start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT; ++i) {
-        testTimeList.add(i);
-    }
-    clock_t end = clock();
-    printf("list push_back use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT; ++i) {
+            testTimeList.add(i);
+        }
+    }, "list push_back");
 
     testTimeList.clear();
     testTimeList.trimToSize();
     testTimeList.reserve(TEST_LIST_COUNT);
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT; ++i) {
-        testTimeList.add(i);
-    }
-    end = clock();
-    printf("list(preserve) push_back use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT; ++i) {
+            testTimeList.add(i);
+        }
+    }, "list(preserve) push_back");
 
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT; ++i) {
-        v.push_back(i);
-    }
-    end = clock();
-    printf("vector push_back use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT; ++i) {
+            v.push_back(i);
+        }
+    }, "vector push_back");
 
     for (int i = 0, size = testTimeList.getSize(); i < size; i++) {
         assert(v[i] == testTimeList.get(i));
@@ -106,12 +101,11 @@ void testList() {
     v.clear();
     v.shrink_to_fit();
     v.reserve(TEST_LIST_COUNT);
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT; ++i) {
-        v.push_back(i);
-    }
-    end = clock();
-    printf("vector(preserve) push_back use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT; ++i) {
+            v.push_back(i);
+        }
+    }, "vector(preserve) push_back");
 
     for (int i = 0, size = testTimeList.getSize(); i < size; i++) {
         assert(v[i] == testTimeList.get(i));
@@ -119,58 +113,53 @@ void testList() {
 
     testTimeList.clear();
     testTimeList.trimToSize();
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT; ++i) {
-        testTimeList.insert(0, i);
-    }
-    end = clock();
-    printf("list push_front use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT; ++i) {
+            testTimeList.insert(0, i);
+        }
+    }, "list push_front");
 
     v.clear();
     v.shrink_to_fit();
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT; ++i) {
-        v.insert(v.begin(), i);
-    }
-    end = clock();
-    printf("vector push_front use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT; ++i) {
+            v.insert(v.begin(), i);
+        }
+    }, "vector push_front");
 
     for (int i = 0, size = testTimeList.getSize(); i < size; i++) {
         assert(v[i] == testTimeList.get(i));
     }
 
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
-        testTimeList.removeAt(0);
-    }
-    end = clock();
-    printf("list(front) remove half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
+            testTimeList.removeAt(0);
+        }
+    }, "list(front) remove half");
 
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
-        v.erase(v.begin());
-    }
-    end = clock();
-    printf("vector(front) remove half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
+            v.erase(v.begin());
+        }
+    }, "vector(front) remove half");
 
     assert(testTimeList.getSize() == v.size());
     for (int i = 0, size = testTimeList.getSize(); i < size; i++) {
         assert(v[i] == testTimeList.get(i));
     }
 
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
-        testTimeList.removeAt(testTimeList.getSize() - 1);
-    }
-    end = clock();
-    printf("list(back) remove half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
-    start = clock();
-    for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
-        v.erase(v.begin() + v.size() - 1);
-    }
-    end = clock();
-    printf("vector(back) remove half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
+            testTimeList.removeAt(testTimeList.getSize() - 1);
+        }
+    }, "list(back) remove half");
+
+    runBlock([&]() {
+        for (int i = 0; i < TEST_LIST_COUNT / 2; ++i) {
+            v.erase(v.begin() + v.size() - 1);
+        }
+    }, "vector(back) remove half");
 
     // fill data
     testTimeList.clear();
@@ -184,26 +173,18 @@ void testList() {
         v.insert(v.begin(), i);
     }
 
-    start = clock();
-    testTimeList.removeRange(0, TEST_LIST_COUNT / 2);
-    end = clock();
-    printf("list remove range half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
 
-    start = clock();
-    v.erase(v.begin(), v.begin() + TEST_LIST_COUNT / 2);
-    end = clock();
-    printf("vector remove range half use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        testTimeList.removeRange(0, TEST_LIST_COUNT / 2);
+    }, "list remove range half");
+
+    runBlock([&]() {
+        v.erase(v.begin(), v.begin() + TEST_LIST_COUNT / 2);
+    }, "vector remove range half");
 
     for (int i = 0, size = testTimeList.getSize(); i < size; i++) {
         assert(v[i] == testTimeList.get(i));
     }
-}
-
-void runWithtime(Runnable runnable, char *msg) {
-    clock_t start = clock();
-    runnable();
-    clock_t end = clock();
-    printf("%s : %fms", msg, 1000.0 * (end - start) / CLOCKS_PER_SEC);
 }
 
 static int randomComp(const void *a, const void *b) {
@@ -326,60 +307,51 @@ void testBPTreeSpeed(int testSpeedCount) {
     printf("***Start test speed. Count=%d\n", testSpeedCount);
     srand(static_cast<unsigned int>(time(nullptr)));
     BPTree<int, int> tree(static_cast<int>(pow(log(testSpeedCount), 2)));
-    int *testKey = new int[testSpeedCount];
-    int *textValue = new int[testSpeedCount];
+    unique_ptr<int[]> testKey(new int[testSpeedCount]);
+    unique_ptr<int[]> testValue(new int[testSpeedCount]);
     for (int i = 0; i < testSpeedCount; ++i) {
-        testKey[i] = rand();
-        textValue[i] = rand();
+        testKey.get()[i] = rand();
+        testValue.get()[i] = rand();
     }
 
 
-    clock_t start = clock();
-    for (int i = 0; i < testSpeedCount; ++i) {
-        tree.put(testKey[i], textValue[i]);
-    }
-    clock_t end = clock();
-    printf("bp tree insert use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < testSpeedCount; ++i) {
+            tree.put(testKey[i], testValue[i]);
+        }
+    }, "bp tree insert");
 
-    start = clock();
-    for (int i = 0; i < testSpeedCount; ++i) {
-        tree.get(testKey[i]);
-    }
-    end = clock();
-    printf("bp tree access use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < testSpeedCount; ++i) {
+            tree.get(testKey[i]);
+        }
+    }, "bp tree access");
 
-    start = clock();
-    for (int i = 0; i < testSpeedCount; ++i) {
-        tree.remove(testKey[i]);
-    }
-    end = clock();
-    printf("bp tree remove use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < testSpeedCount; ++i) {
+            tree.remove(testKey[i]);
+        }
+    }, "bp tree remove");
+
 
     map<int, int> m;
-    start = clock();
-    for (int i = 0; i < testSpeedCount; ++i) {
-        m[testKey[i]] = textValue[i];
-    }
-    end = clock();
-    printf("stl map insert use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&]() {
+        for (int i = 0; i < testSpeedCount; ++i) {
+            m[testKey[i]] = testValue[i];
+        }
+    }, "stl map insert");
 
+    runBlock([&]() {
+        for (int i = 0; i < testSpeedCount; ++i) {
+            m.at(testKey[i]);
+        }
+    }, "stl map access");
 
-    start = clock();
-    for (int i = 0; i < testSpeedCount; ++i) {
-        m[testKey[i]];
-    }
-    end = clock();
-    printf("stl map access use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
-
-    start = clock();
-    for (int i = 0; i < testSpeedCount; ++i) {
-        m.erase(testKey[i]);
-    }
-    end = clock();
-    printf("stl map remove use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
-
-    delete[]testKey;
-    delete[]textValue;
+    runBlock([&]() {
+        for (int i = 0; i < testSpeedCount; ++i) {
+            m.erase(testKey[i]);
+        }
+    }, "stl map remove");
 
     printf("***End test speed.\n");
 }
@@ -429,15 +401,14 @@ void testBPTreeSerial(int serialCount) {
     }
     string s = string("test.bpt");
 
-    clock_t start = clock();
-    tree.serialize(s);
-    clock_t end = clock();
-    printf("serialize use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    runBlock([&tree, &s]() {
+        tree.serialize(s);
+    }, "serialize");
 
-    start = clock();
-    BPTree<int, int> dTree = BPTree<int, int>::deserialize(s);
-    end = clock();
-    printf("deserialize use: %f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+    shared_ptr<BPTree<int, int>> dTreePtr;
+    runBlock([&dTreePtr, &s]() {
+        dTreePtr = BPTree<int, int>::deserialize(s);
+    }, "deserialize");
 
     FILE *f = fopen("test.bpt", "r");
     if (!f) {
@@ -448,8 +419,16 @@ void testBPTreeSerial(int serialCount) {
     fclose(f);
 
     for (int i = 0; i < serialCount; ++i) {
-        assert(*(dTree.get(arr[i])) == i);
+        assert(*(dTreePtr->get(arr[i])) == i);
     }
     remove("test.bpt");
     printf("**End serial test.\n");
+}
+
+template<class Function>
+void runBlock(Function func, const char *msg) {
+    clock_t start = clock();
+    func();
+    clock_t end = clock();
+    printf("%s use: %f ms\n", msg, 1000.0 * (end - start) / CLOCKS_PER_SEC);
 }
