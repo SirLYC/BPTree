@@ -9,22 +9,25 @@
 #include <algorithm>
 #include "Comp.h"
 
+
+const static unsigned int MIN_CAP = 1;
+
 template<typename T>
 class List {
 private:
     const comparator<T> comp;
-    int cap{};
-    int size = 0;
+    unsigned int cap{};
+    unsigned int size = 0;
     T *values;
 
-    inline void expandTo(int cap);
+    inline void expandTo(unsigned int cap);
 
 public:
     List() : List(2, NULL) {}
 
-    explicit List(int cap) : List(cap, NULL) {}
+    explicit List(unsigned int cap) : List(cap, NULL) {}
 
-    explicit List(int cap, comparator<T> comp) : cap(std::max(1, cap)), comp(comp) {
+    explicit List(unsigned int cap, comparator<T> comp) : cap(std::max(MIN_CAP, cap)), comp(comp) {
         values = (T *) malloc(byteSize(cap));
         if (!values) {
             throw "cannot malloc";
@@ -84,11 +87,11 @@ public:
 
     T &get(int index);
 
-    int getSize() const;
+    unsigned int getSize() const;
 
     bool isEmpty();
 
-    void reserve(int cap);
+    void reserve(unsigned int cap);
 
     void clear();
 
@@ -96,9 +99,9 @@ public:
 
     void trimToSize();
 
-    inline void checkRange(const int index) const;
+    inline void checkRange(int index) const;
 
-    inline size_t byteSize(int count);
+    inline size_t byteSize(unsigned int count);
 };
 
 template<typename T>
@@ -128,8 +131,8 @@ void List<T>::insert(int index, const T &value) {
 
 template<typename T>
 void List<T>::insert(int index, const List<T> &another) {
-    int s = size;
-    int cap = this->cap;
+    unsigned int s = size;
+    unsigned int cap = this->cap;
     while ((s + another.size) >= cap) {
         cap <<= 1;
     }
@@ -145,8 +148,8 @@ void List<T>::insert(int index, const List<T> &another, int startIndex, int coun
     if (count <= 0) return;
     another.checkRange(startIndex);
     another.checkRange(startIndex + count - 1);
-    int s = size + count;
-    int cap = this->cap;
+    unsigned int s = size + count;
+    unsigned int cap = this->cap;
     while (s >= cap) {
         cap <<= 1;
     }
@@ -160,7 +163,7 @@ void List<T>::insert(int index, const List<T> &another, int startIndex, int coun
 template<typename T>
 void List<T>::trimToSize() {
     if (cap > size) {
-        cap = std::max(size, 1);
+        cap = std::max(size, MIN_CAP);
         values = (T *) realloc(values, byteSize(cap));
     }
 }
@@ -172,7 +175,7 @@ void List<T>::clear() {
 }
 
 template<typename T>
-void List<T>::reserve(int cap) {
+void List<T>::reserve(unsigned int cap) {
     this->cap = std::min(size, cap);
     expandTo(cap);
 }
@@ -188,12 +191,12 @@ T &List<T>::get(int index) {
 }
 
 template<typename T>
-int List<T>::getSize() const {
+unsigned int List<T>::getSize() const {
     return size;
 }
 
 template<typename T>
-void List<T>::checkRange(const int index) const {
+void List<T>::checkRange(int index) const {
     if (index < 0 || index >= size) {
         throw "index out of size";
     }
@@ -229,7 +232,7 @@ void List<T>::set(int index, const T &value) {
 }
 
 template<typename T>
-void List<T>::expandTo(int cap) {
+void List<T>::expandTo(unsigned int cap) {
     values = (T *) realloc(values, byteSize(cap));
     if (!values) {
         throw "re-alloc failed!";
@@ -251,7 +254,7 @@ void List<T>::removeRange(int start, int count) {
 }
 
 template<typename T>
-size_t List<T>::byteSize(int count) {
+size_t List<T>::byteSize(unsigned int count) {
     return count * sizeof(T);
 }
 

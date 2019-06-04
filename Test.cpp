@@ -16,7 +16,7 @@
 using namespace std;
 
 void testList() {
-    srand(static_cast<unsigned int>(time(NULL)));
+    srand(static_cast<unsigned int>(time(nullptr)));
 
     List<int> l;
 
@@ -313,7 +313,6 @@ void testBPTreeSpeed(int testSpeedCount) {
         testKey.get()[i] = rand();
         testValue.get()[i] = rand();
     }
-
 
     runBlock([&]() {
         for (int i = 0; i < testSpeedCount; ++i) {

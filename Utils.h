@@ -9,7 +9,12 @@
 #include <cerrno>
 #include <string>
 
+static int test = 1;
+static bool isMachineLittleEndian = *((char *) &test) == 1;
+
+// all file io is in little-endian
 namespace bp_tree_utils {
+
     inline FILE *fopen(const char *path, const char *mode) {
         FILE *fptr = std::fopen(path, mode);
         if (!fptr) {
@@ -17,6 +22,20 @@ namespace bp_tree_utils {
         }
         return fptr;
     }
+
+    inline void changeEndian(void *ptr, size_t size, size_t nitems) {
+        if (!isMachineLittleEndian) {
+            auto valPtr = (unsigned char *) ptr;
+            for (size_t i = 0; i < nitems; ++i) {
+                for (size_t j = 0, k = size - 1; j < k; ++j, --k) {
+                    unsigned char b = valPtr[i * size + j];
+                    valPtr[i * size + j] = valPtr[i * size + k];
+                    valPtr[i * size + k] = b;
+                }
+            }
+        }
+    }
+
 
     inline void fwrite(const void *ptr, size_t size, size_t nitems,
                        FILE *stream) {
@@ -30,11 +49,25 @@ namespace bp_tree_utils {
         if (std::fread(ptr, size, nitems, stream) != nitems) {
             throw std::string("Read from file failed");
         }
+        changeEndian(ptr, size, nitems);
     }
+
 
     template<typename T>
     void writeVal(const T &val, FILE *stream) {
         bp_tree_utils::fwrite(&val, sizeof(T), 1, stream);
+    }
+
+    template<typename T>
+    void writeValLittle(T val, FILE *stream) {
+        changeEndian(&val, sizeof(T), 1);
+        bp_tree_utils::fwrite(&val, sizeof(T), 1, stream);
+    }
+
+    template<typename T>
+    void writeArrayLittle(T *arr, size_t length, FILE *stream) {
+        changeEndian(arr, sizeof(T), length);
+        bp_tree_utils::fwrite(arr, sizeof(T), length, stream);
     }
 
     template<typename T>
@@ -52,6 +85,11 @@ namespace bp_tree_utils {
         std::unique_ptr<char[]> buf(new char[size]);
         snprintf(buf.get(), static_cast<size_t>(size), format.c_str(), args ...);
         return std::string(buf.get(), buf.get() + size - 1);
+    }
+
+    inline bool isLittleEndiant() {
+        int test = 1;
+        return *((char *) &test) == 1;
     }
 }
 

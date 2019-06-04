@@ -33,9 +33,9 @@ public:
     /**
      * deserialize from a file
      */
-    static BPTree<K, V> deserialize(const std::string &path);
+    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path);
 
-    static BPTree<K, V> deserialize(const std::string &path, comparator<K> comp);
+    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path, comparator<K> comp);
 
     void put(const K &key, const V &value);
 
@@ -54,15 +54,23 @@ public:
 
     /**
      * iterate order by key
-     * @param func call func(key, value) for each. func returns true means iteration ends
+     * @param func call func(const K& key, const V& value) for each. func returns true means iteration ends
      */
-    void foreach(biApply<K, V> func);
+    template<typename BiApply>
+    void foreach(BiApply func);
 
-    void foreachReverse(biApply<K, V> func);
+    template<typename BiApply>
+    void foreachReverse(BiApply func);
 
-    void foreachIndex(biApplyIndex<K, V> func);
+    /**
+     * iterate order by key with index (starts from 0)
+     * @param func call func(int index, const K& key, const V& value) for each. func returns true means iteration ends
+     */
+    template<typename BiApplyIndex>
+    void foreachIndex(BiApplyIndex func);
 
-    void foreachIndexReverse(biApplyIndex<K, V> func);
+    template<typename BiApplyIndex>
+    void foreachIndexReverse(BiApplyIndex func);
 
     void serialize(std::string &path);
 
@@ -73,8 +81,6 @@ public:
     void clear();
 };
 ```
-
-> Tips：为了兼容自定义类别，需要传入比较大小的函数指针，或实现相应的&gt;、=、&lt;等运算符;
 
 ## 重要数据结构
 
@@ -96,8 +102,7 @@ struct Node {
     List<V> values;
     /*-------index-------*/
     List<Node *> childNodePtrs;
-    // for init
-    int initCap;
+
     // constructor
     ...
 };
@@ -108,37 +113,41 @@ struct Node {
 ## 序列化
 
 - 文件后缀为bpt
+- 所有数据在文件中为小端序
 - 头部格式：
 
-| 偏移(byte) | 大小(byte) |                 内容                 |
-| :--------: | :--------: | :----------------------------------: |
-|     0      |     4      |            LYC\0 头部标识            |
-|     4      |     4      |       order，int类型，B+树的阶       |
-|     8      |     4      | initCap，int类型，每个节点预分配大小 |
-|     12     |     4      |       size，int类型，元素个数        |
+| 偏移(byte) | 大小(byte) |                             内容                             |
+| :--------: | :--------: | :----------------------------------------------------------: |
+|     0      |     5      |            固定内容，LYCBP，魔数（magic number）             |
+|     5      |     1      |         sizeof(short)，用来检测文件与本机器是否兼容          |
+|     6      |     1      |                     sizoef(unsigned int)                     |
+|     7      |     1      |                         sizoef(long)                         |
+|     8      |     4      | sizoefK，每个key占字节数，反序列化时与模板参数不同时抛出异常 |
+|     12     |     4      |                  sizeofV，每个value占字节数                  |
+|     16     |     4      |                   order，int类型，B+树的阶                   |
+|     20     |     4      |        initCap，unsigned int类型，每个节点预分配大小         |
+|     24     |     4      |               size，unsigned int类型，元素个数               |
 
 - 如果size不为0，头部结束后就是根节点，节点有同一的格式，节点前面通用格式：
 
-| 偏移(相对于节点起始，byte) |   大小(byte)    |                  内容                  |
-| :------------------------: | :-------------: | :------------------------------------: |
-|             0              |        4        | leaf，int类型，标识节点是否为叶子节点  |
-|             4              |        4        |   sizeofK，int类型，key类型占字节数    |
-|             8              |        4        | kSize，int类型，该节点拥有的关键字数量 |
-|             12             | kSize * sizeofK |            按顺序存储关键字            |
+| 偏移(相对于节点起始，byte) |   大小(byte)    |                      内容                       |
+| :------------------------: | :-------------: | :---------------------------------------------: |
+|             0              |        1        |     leaf，bool类型，标识节点是否为叶子节点      |
+|             1              |        4        | kSize，unsigned int类型，该节点拥有的关键字数量 |
+|             5              | kSize * sizeofK |                按顺序存储关键字                 |
 
 - 对于叶子节点
 
-| 偏移(相对于节点起始，byte) |  大小(byte)   |                内容                 |
-| :------------------------: | :-----------: | :---------------------------------: |
-|   12 +  kSize * sizeofK    |       4       | sizeofV，int类型，value类型占字节数 |
-|   16 +  kSize * sizeofK    | kSize*sizeofK |            按顺序存储值             |
+| 偏移(相对于节点起始，byte) |  大小(byte)   |     内容     |
+| :------------------------: | :-----------: | :----------: |
+|    5 +  kSize * sizeofK    | kSize*sizeofK | 按顺序存储值 |
 
 - 对于非叶子节点
 
 
 | 偏移(相对于节点起始，byte) | 大小(byte) |                   内容                   |
 | :------------------------: | :--------: | :--------------------------------------: |
-|   12 +  kSize * sizeofK    | kSize * 8  | long类型，按顺序存储字节点在文件中的偏移 |
+|    5 +  kSize * sizeofK    | kSize * 8  | long类型，按顺序存储字节点在文件中的偏移 |
 
 ## 实现要点
 
@@ -285,6 +294,7 @@ struct Node {
 ### 内存测试
 
 - 数据量：10^6
+- 阶：20
 - 添加数据后移除数据
 - 循环5次，添加后调用clear()
 - 工具：Xcode Instruments
@@ -310,7 +320,7 @@ struct Node {
 <center>
     <img style="border-radius: 0.3125em;
     box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
-    src="./pics/serial_test.jpg">
+    src="./pics/serial_test.png">
     <br>
     <div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
@@ -322,11 +332,11 @@ struct Node {
 
  | 数据量 | 序列化(ms) | 反序列化(ms) | 文件大小(bytes) |
  | :----: | :--------: | :----------: | :-------------: |
- |   0    |   13.794   |    0.082     |       16        |
- |   1    |    0.15    |     0.03     |       40        |
- |   10   |   0.111    |    0.033     |       112       |
- |  10^2  |   0.207    |    0.064     |      1052       |
- |  10^3  |   0.877    |    0.490     |      10168      |
- |  10^4  |   7.870    |    5.567     |     101312      |
- |  10^5  |   61.318   |    59.418    |     1012108     |
- |  10^6  |  694.879   |   477.630    |    10127572     |
+ |   0    |   0.118    |    0.041     |       28        |
+ |   1    |   0.127    |     0.05     |       41        |
+ |   10   |   0.131    |    0.047     |       113       |
+ |  10^2  |   0.221    |    0.083     |       952       |
+ |  10^3  |   1.438    |    0.430     |      9223       |
+ |  10^4  |   8.349    |    8.349     |      92970      |
+ |  10^5  |  103.807   |    54.889    |     930508      |
+ |  10^6  |  726.283   |   595.987    |     9303491     |
