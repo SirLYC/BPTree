@@ -224,8 +224,10 @@ static bool foreachIndexReverseFunc(int index, const int &key, const int &value)
     return false;
 }
 
-void testForeach(BPTree<int, int> &tree, int *n) {
-    nums = n;
+void testForeach(BPTree<int, int> &tree, unique_ptr<int[]> &n) {
+    nums = n.get();
+
+    /*---------------- use function pointer---------------*/
     lastKey = -1;
     tree.foreach(foreachFunc);
     lastKey = -1;
@@ -235,15 +237,66 @@ void testForeach(BPTree<int, int> &tree, int *n) {
     lastKey = TEST_BP_TREE_FUNCTION_COUNT + 1;
     tree.foreachIndexReverse(foreachIndexReverseFunc);
     nums = nullptr;
+
+    /*-------------------- use lambda --------------------*/
+    int *keyPtr = nullptr;
+    tree.foreach([&](const int &key, const int &value) {
+        if (keyPtr) {
+            assert(n[value] == key);
+            assert(key > *keyPtr);
+            lastKey = key;
+        }
+        keyPtr = &(n[value]);
+        return false;
+    });
+
+    keyPtr = nullptr;
+    tree.foreachReverse([&](const int &key, const int &value) {
+        if (keyPtr) {
+            assert(n[value] == key);
+            assert(key < *keyPtr);
+            lastKey = key;
+        }
+        keyPtr = &(n[value]);
+        return false;
+    });
+
+    int lastIndex = -1;
+    keyPtr = nullptr;
+    tree.foreachIndex([&](int index, const int &key, const int &value) {
+        if (keyPtr) {
+            assert(n[value] == key);
+            assert(key > *keyPtr);
+            assert(index == lastIndex + 1);
+            lastKey = key;
+        }
+        lastIndex++;
+        keyPtr = &(n[value]);
+        return false;
+    });
+
+    lastIndex = tree.getSize();
+    keyPtr = nullptr;
+    tree.foreachIndexReverse([&](int index, const int &key, const int &value) {
+        if (keyPtr) {
+            assert(n[value] == key);
+            assert(key < *keyPtr);
+            assert(index == lastIndex - 1);
+            lastKey = key;
+        }
+        lastIndex--;
+        keyPtr = &(n[value]);
+        return false;
+    });
 }
 
 void testBPTreeFunction() {
     srand(static_cast<unsigned int>(time(nullptr)));
-    int *arr = new int[TEST_BP_TREE_FUNCTION_COUNT];
+    unique_ptr<int[]> arr(new int[TEST_BP_TREE_FUNCTION_COUNT]);
     for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
         arr[i] = i;
     }
-    qsort(arr, TEST_BP_TREE_FUNCTION_COUNT, sizeof(int), randomComp);
+    qsort(arr.get(), TEST_BP_TREE_FUNCTION_COUNT, sizeof(int), randomComp);
 
     int order = static_cast<int>(log(TEST_BP_TREE_FUNCTION_COUNT)) + 1;
     BPTree<int, int> tree(order);
@@ -295,9 +348,32 @@ void testBPTreeFunction() {
         assert(tree.containsKey(arr[i]));
         assert(*(tree.get(arr[i])) == i);
     }
-
     testForeach(tree, arr);
-    delete[](arr);
+
+    auto t2 = tree;
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(t2.containsKey(arr[i]));
+        assert(*(tree.get(arr[i])) == *(t2.get(arr[i])));
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT / 2; ++i) {
+        tree.remove(arr[i]);
+    }
+
+    for (int i = 0; i < TEST_BP_TREE_FUNCTION_COUNT; ++i) {
+        assert(t2.containsKey(arr[i]));
+        assert(*(t2.get(arr[i])) == i);
+    }
+
+
+    A a1{1};
+    A a2{3};
+    A a3{3};
+    BPTree<A, int, compareA> aTree(3);
+    aTree.put(a1, 2);
+    aTree.put(a2, 1);
+    aTree.put(a3, 3);
+    assert(*aTree.get(a3) == 3);
 
     printf("bp tree function test passed!\n");
 }
@@ -306,7 +382,7 @@ void testBPTreeFunction() {
 void testBPTreeSpeed(int testSpeedCount) {
     printf("***Start test speed. Count=%d\n", testSpeedCount);
     srand(static_cast<unsigned int>(time(nullptr)));
-    BPTree<int, int> tree(static_cast<int>(pow(log(testSpeedCount), 2)));
+    BPTree<int, int> tree(static_cast<unsigned int>(pow(log(testSpeedCount), 2)));
     unique_ptr<int[]> testKey(new int[testSpeedCount]);
     unique_ptr<int[]> testValue(new int[testSpeedCount]);
     for (int i = 0; i < testSpeedCount; ++i) {
@@ -406,7 +482,7 @@ void testBPTreeSerial(int serialCount) {
 
     shared_ptr<BPTree<int, int>> dTreePtr;
     runBlock([&dTreePtr, &s]() {
-        dTreePtr = BPTree<int, int>::deserialize(s);
+        dTreePtr = BPTree<int, int>::deserialize(s, DefaultCompare<int>());
     }, "deserialize");
 
     FILE *f = fopen("test.bpt", "r");
@@ -430,4 +506,8 @@ void runBlock(Function func, const char *msg) {
     func();
     clock_t end = clock();
     printf("%s use: %f ms\n", msg, 1000.0 * (end - start) / CLOCKS_PER_SEC);
+}
+
+int compareA(const A &a1, const A &a2) {
+    return a1.a - a2.a;
 }

@@ -13,7 +13,7 @@
 
 const unsigned int MIN_ORDER = 2;
 
-template<typename K, typename V>
+template<typename K, typename V, class Comp = DefaultCompare<K>>
 class BPTree {
 private:
     static const std::string SUFFIX;
@@ -25,16 +25,16 @@ private:
         bool leaf;
         List<Node *> childNodePtrs;
         List<V> values;
-        List<K> keys;
+        List<K, Comp> keys;
 
-        Node(unsigned int initCap, bool leaf);;
+        Node(unsigned int initCap, bool leaf, Comp comp);
     };
 
     unsigned int order;
     unsigned int size;
     unsigned int minLoad;
-    comparator<K> comp;
-    unsigned int initCap = 0;
+    Comp comp;
+    unsigned int initCap;
     Node *root;
 
     bool putToNode(Node *nodePtr, const K &key, const V *value, Node *insertNodePtr);
@@ -64,13 +64,25 @@ private:
      */
     Node *getNextSibling(Node *node);
 
+    void recoverLinkList(bool valid);
+
+    Node *copyNode(Node *parentPtr, Node *fromPtr);
+
 public:
 
-    explicit BPTree(unsigned int order) : BPTree(order, 0, NULL) {}
+    explicit BPTree(unsigned int order) :
+            comp(),
+            order(std::max(MIN_ORDER, order)),
+            size(0),
+            minLoad((this->order + 1) / 2),
+            initCap(std::max(std::min(this->order,
+                                      initCap), this->minLoad)),
+            root(new Node(this->initCap,
+                          true, comp)) {}
 
-    BPTree(unsigned int order, comparator<K> comp) : BPTree(order, 0, comp) {}
+    BPTree(unsigned int order, Comp comp) : BPTree(order, 2, comp) {}
 
-    explicit BPTree(unsigned int order, unsigned int initCap, comparator<K> comp) :
+    explicit BPTree(unsigned int order, unsigned int initCap, Comp comp) :
             order(std::max(MIN_ORDER, order)),
             size(0),
             minLoad((this->order + 1) / 2),
@@ -78,12 +90,16 @@ public:
                                       initCap), this->minLoad)),
             comp(comp),
             root(new Node(this->initCap,
-                          true)) {}
+                          true, comp)) {}
 
-    BPTree(const BPTree &another) {
-        order = another.order;
-        minLoad = another.minLoad;
-        size = another.minLoad;
+    BPTree(const BPTree &another) :
+            order(another.order),
+            minLoad(another.minLoad),
+            size(another.size),
+            initCap(another.initCap),
+            comp(another.comp) {
+        root = copyNode(NULL, another.root);
+        recoverLinkList(false);
     }
 
     ~BPTree();
@@ -91,9 +107,7 @@ public:
     /**
      * deserialize from a file
      */
-    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path);
-
-    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path, comparator<K> comp);
+    static std::shared_ptr<BPTree<K, V, Comp>> deserialize(const std::string &path, Comp comp);
 
     void put(const K &key, const V &value);
 
@@ -106,9 +120,9 @@ public:
 
     bool containsKey(const K &key);
 
-    int getOrder();
+    unsigned int getOrder();
 
-    int getSize();
+    unsigned int getSize();
 
     /**
      * iterate order by key
@@ -139,9 +153,10 @@ public:
     void clear();
 };
 
-template<typename K, typename V>
-BPTree<K, V>::Node::Node(unsigned int initCap, bool leaf) :
-        leaf(leaf) {
+template<typename K, typename V, class Comp>
+BPTree<K, V, Comp>::Node::Node(unsigned int initCap, bool leaf, Comp comp) :
+        leaf(leaf),
+        keys(initCap, comp) {
     childNodePtrs.reserve(initCap);
     if (leaf) {
         values.reserve(initCap);
@@ -151,17 +166,17 @@ BPTree<K, V>::Node::Node(unsigned int initCap, bool leaf) :
 }
 
 
-template<typename K, typename V>
-const std::string BPTree<K, V>::SUFFIX = ".bpt";
+template<typename K, typename V, class Comp>
+const std::string BPTree<K, V, Comp>::SUFFIX = ".bpt";
 
-template<typename K, typename V>
-void BPTree<K, V>::put(const K &key, const V &value) {
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::put(const K &key, const V &value) {
     bool result;
     Node *insertNode = root;
     int pos = -1;
     while (!insertNode->leaf) {
         int s = insertNode->childNodePtrs.getSize();
-        List<K> constKeys = insertNode->keys;
+        auto constKeys = insertNode->keys;
         pos = constKeys.binaryFind(key);
         if (pos == s) {
             pos--;
@@ -174,9 +189,9 @@ void BPTree<K, V>::put(const K &key, const V &value) {
 
     Node *tmp = insertNode->parentPtr;
     while (tmp) {
-        List<K> &keys = tmp->keys;
+        auto &keys = tmp->keys;
         K oldKey = keys[pos];
-        if (pos >= 0 && pos < keys.getSize() && compare(oldKey, key, comp) < 0) {
+        if (pos >= 0 && pos < keys.getSize() && comp(oldKey, key) < 0) {
             keys[pos] = key;
             if (pos == keys.getSize() - 1 && (tmp = tmp->parentPtr)) {
                 pos = tmp->keys.binaryFind(oldKey);
@@ -206,13 +221,13 @@ void BPTree<K, V>::put(const K &key, const V &value) {
     }
 }
 
-template<typename K, typename V>
-void BPTree<K, V>::remove(K &key) {
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::remove(K &key) {
     Node *deleteNodePtr = root;
     int pos = -1;
     while (!deleteNodePtr->leaf) {
         int s = deleteNodePtr->childNodePtrs.getSize();
-        List<K> constKeys = deleteNodePtr->keys;
+        auto constKeys = deleteNodePtr->keys;
         pos = constKeys.binaryFind(key);
         if (pos == s) {
             pos--;
@@ -243,42 +258,42 @@ void BPTree<K, V>::remove(K &key) {
     }
 }
 
-template<typename K, typename V>
-V *BPTree<K, V>::get(const K &key) {
+template<typename K, typename V, class Comp>
+V *BPTree<K, V, Comp>::get(const K &key) {
     Node *curPtr = root;
     int pos;
     while (!curPtr->leaf) {
         int s = curPtr->childNodePtrs.getSize();
-        List<K> constKeys = curPtr->keys;
+        auto constKeys = curPtr->keys;
         pos = constKeys.binaryFind(key);
         if (pos == s) {
             pos--;
         }
         curPtr = curPtr->childNodePtrs[pos];
     }
-    const List<K> &constKeys = curPtr->keys;
+    const auto &constKeys = curPtr->keys;
     pos = constKeys.binaryFind(key);
-    if (pos >= 0 && pos < curPtr->values.getSize() && compare(curPtr->keys[pos], key, comp) == 0) {
+    if (pos >= 0 && pos < curPtr->values.getSize() && comp(curPtr->keys[pos], key) == 0) {
         return &(curPtr->values[pos]);
     }
 
     return NULL;
 }
 
-template<typename K, typename V>
-int BPTree<K, V>::getOrder() {
+template<typename K, typename V, class Comp>
+unsigned int BPTree<K, V, Comp>::getOrder() {
     return order;
 }
 
-template<typename K, typename V>
-int BPTree<K, V>::getSize() {
+template<typename K, typename V, class Comp>
+unsigned int BPTree<K, V, Comp>::getSize() {
     return size;
 }
 
-template<typename K, typename V>
-bool BPTree<K, V>::putToNode(BPTree::Node *nodePtr, const K &key, const V *value, BPTree::Node *insertNodePtr) {
+template<typename K, typename V, class Comp>
+bool BPTree<K, V, Comp>::putToNode(BPTree::Node *nodePtr, const K &key, const V *value, BPTree::Node *insertNodePtr) {
     int toIndex = nodePtr->keys.binaryFind(key);
-    bool present = toIndex < nodePtr->keys.getSize() && compare(key, nodePtr->keys[toIndex], comp) == 0;
+    bool present = toIndex < nodePtr->keys.getSize() && comp(key, nodePtr->keys[toIndex]) == 0;
 
     if (present) {
         if (nodePtr->leaf) {
@@ -299,9 +314,9 @@ bool BPTree<K, V>::putToNode(BPTree::Node *nodePtr, const K &key, const V *value
     return true;
 }
 
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::split(BPTree::Node *nodePtr) {
-    List<K> &keys = nodePtr->keys;
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::split(BPTree::Node *nodePtr) {
+    auto &keys = nodePtr->keys;
     if (keys.getSize() <= order) {
         return NULL;
     }
@@ -309,14 +324,14 @@ typename BPTree<K, V>::Node *BPTree<K, V>::split(BPTree::Node *nodePtr) {
     int mid = (keys.getSize() + 1) / 2;
     Node *parentPtr = nodePtr->parentPtr;
     if (!parentPtr) {
-        parentPtr = new Node(initCap, false);
+        parentPtr = new Node(initCap, false, comp);
         nodePtr->parentPtr = parentPtr;
     }
 
     // split
-    Node *left = new Node(initCap, nodePtr->leaf);
-    List<K> &leftKeys = left->keys;
-    List<K> &rightKeys = nodePtr->keys;
+    Node *left = new Node(initCap, nodePtr->leaf, comp);
+    auto &leftKeys = left->keys;
+    auto &rightKeys = nodePtr->keys;
     leftKeys.add(rightKeys, 0, mid);
     rightKeys.removeRange(0, mid);
     left->parentPtr = parentPtr;
@@ -342,9 +357,9 @@ typename BPTree<K, V>::Node *BPTree<K, V>::split(BPTree::Node *nodePtr) {
     return parentPtr;
 }
 
-template<typename K, typename V>
-int BPTree<K, V>::deleteFromNode(BPTree::Node *nodePtr, const K &key) {
-    List<K> &keys = nodePtr->keys;
+template<typename K, typename V, class Comp>
+int BPTree<K, V, Comp>::deleteFromNode(BPTree::Node *nodePtr, const K &key) {
+    auto &keys = nodePtr->keys;
     int pos = keys.binaryFind(key);
     if (pos < 0 || pos >= nodePtr->keys.getSize() || keys[pos] != key) {
         return -1;
@@ -360,13 +375,13 @@ int BPTree<K, V>::deleteFromNode(BPTree::Node *nodePtr, const K &key) {
     return pos;
 }
 
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::fixNode(BPTree::Node *nodePtr) {
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::fixNode(BPTree::Node *nodePtr) {
     if (minLoad <= nodePtr->keys.getSize() || !nodePtr->parentPtr) {
         return NULL;
     }
 
-    List<K> &parentKeys = nodePtr->parentPtr->keys;
+    auto &parentKeys = nodePtr->parentPtr->keys;
     int parentKeySize = parentKeys.getSize();
     K &key = nodePtr->keys[nodePtr->keys.getSize() - 1];
     int pos = nodePtr->parentPtr->keys.binaryFind(key);
@@ -472,8 +487,8 @@ typename BPTree<K, V>::Node *BPTree<K, V>::fixNode(BPTree::Node *nodePtr) {
     return NULL;
 }
 
-template<typename K, typename V>
-void BPTree<K, V>::updateParentKey(BPTree::Node *node, K &oldKey, K &newKey, int pos) {
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::updateParentKey(BPTree::Node *node, K &oldKey, K &newKey, int pos) {
     Node *tmpNodePtr = node;
     // delete old key, update parent
     while (tmpNodePtr && tmpNodePtr->parentPtr) {
@@ -487,8 +502,8 @@ void BPTree<K, V>::updateParentKey(BPTree::Node *node, K &oldKey, K &newKey, int
     }
 }
 
-template<typename K, typename V>
-void BPTree<K, V>::clear(BPTree::Node *node) {
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::clear(BPTree::Node *node) {
     if (!node->leaf) {
         int s = node->childNodePtrs.getSize();
         for (int i = 0; i < s; ++i) {
@@ -505,8 +520,8 @@ void BPTree<K, V>::clear(BPTree::Node *node) {
     node->values.clear();
 }
 
-template<typename K, typename V>
-void BPTree<K, V>::clear() {
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::clear() {
     if (size == 0)
         return;
     clear(root);
@@ -514,31 +529,31 @@ void BPTree<K, V>::clear() {
     size = 0;
 }
 
-template<typename K, typename V>
-bool BPTree<K, V>::containsKey(const K &key) {
+template<typename K, typename V, class Comp>
+bool BPTree<K, V, Comp>::containsKey(const K &key) {
     Node *curPtr = root;
     int pos;
     while (!curPtr->leaf) {
         int s = curPtr->childNodePtrs.getSize();
-        List<K> constKeys = curPtr->keys;
+        auto constKeys = curPtr->keys;
         pos = constKeys.binaryFind(key);
         if (pos == s) {
             pos--;
         }
         curPtr = curPtr->childNodePtrs[pos];
     }
-    const List<K> &constKeys = curPtr->keys;
+    const auto &constKeys = curPtr->keys;
     pos = constKeys.binaryFind(key);
     if (pos >= 0 && pos < curPtr->values.getSize()) {
-        return compare(curPtr->keys[pos], key, comp) == 0;
+        return comp(curPtr->keys[pos], key) == 0;
     }
 
     return false;
 }
 
-template<typename K, typename V>
+template<typename K, typename V, class Comp>
 template<class BiApply>
-void BPTree<K, V>::foreach(BiApply func) {
+void BPTree<K, V, Comp>::foreach(BiApply func) {
     Node *node = getFirstLeaf();
     while (node) {
         for (int i = 0, s = node->values.getSize(); i < s; ++i) {
@@ -552,9 +567,9 @@ void BPTree<K, V>::foreach(BiApply func) {
     }
 }
 
-template<typename K, typename V>
+template<typename K, typename V, class Comp>
 template<class BiApplyIndex>
-void BPTree<K, V>::foreachIndex(BiApplyIndex func) {
+void BPTree<K, V, Comp>::foreachIndex(BiApplyIndex func) {
     Node *node = getFirstLeaf();
     int index = 0;
     while (node) {
@@ -569,8 +584,8 @@ void BPTree<K, V>::foreachIndex(BiApplyIndex func) {
     }
 }
 
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::getFirstLeaf() {
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::getFirstLeaf() {
     Node *node = root;
     while (!node->leaf) {
         node = node->childNodePtrs[0];
@@ -579,8 +594,8 @@ typename BPTree<K, V>::Node *BPTree<K, V>::getFirstLeaf() {
 }
 
 
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::getLastLeaf() {
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::getLastLeaf() {
     Node *node = root;
     while (!node->leaf) {
         node = node->childNodePtrs[node->childNodePtrs.getSize() - 1];
@@ -588,9 +603,9 @@ typename BPTree<K, V>::Node *BPTree<K, V>::getLastLeaf() {
     return node;
 }
 
-template<typename K, typename V>
+template<typename K, typename V, class Comp>
 template<class BiApply>
-void BPTree<K, V>::foreachReverse(BiApply func) {
+void BPTree<K, V, Comp>::foreachReverse(BiApply func) {
     Node *node = getLastLeaf();
     while (node) {
         for (int i = node->values.getSize() - 1; i >= 0; --i) {
@@ -604,9 +619,9 @@ void BPTree<K, V>::foreachReverse(BiApply func) {
     }
 }
 
-template<typename K, typename V>
+template<typename K, typename V, class Comp>
 template<class BiApplyIndex>
-void BPTree<K, V>::foreachIndexReverse(BiApplyIndex func) {
+void BPTree<K, V, Comp>::foreachIndexReverse(BiApplyIndex func) {
     Node *node = getLastLeaf();
     int index = size - 1;
     while (node) {
@@ -621,8 +636,8 @@ void BPTree<K, V>::foreachIndexReverse(BiApplyIndex func) {
     }
 }
 
-template<typename K, typename V>
-void BPTree<K, V>::serialize(std::string &path) {
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::serialize(std::string &path) {
     if (!path.rfind(SUFFIX)) {
         path = path += SUFFIX;
     }
@@ -647,12 +662,12 @@ void BPTree<K, V>::serialize(std::string &path) {
     fclose(f);
 }
 
-template<typename K, typename V>
-long BPTree<K, V>::serializeNode(const BPTree::Node *node, FILE *f) {
+template<typename K, typename V, class Comp>
+long BPTree<K, V, Comp>::serializeNode(const BPTree::Node *node, FILE *f) {
     auto myOffset = ftell(f);
 
     bp_tree_utils::writeVal(node->leaf, f);
-    const List<K> &keys = node->keys;
+    const auto &keys = node->keys;
     unsigned int s = keys.getSize();
     assert(s >= minLoad || !node->parentPtr);
     bp_tree_utils::writeValLittle(s, f);
@@ -683,13 +698,8 @@ long BPTree<K, V>::serializeNode(const BPTree::Node *node, FILE *f) {
     return myOffset;
 }
 
-template<typename K, typename V>
-std::shared_ptr<BPTree<K, V>> BPTree<K, V>::deserialize(const std::string &path) {
-    return deserialize(path, NULL);
-}
-
-template<typename K, typename V>
-std::shared_ptr<BPTree<K, V>> BPTree<K, V>::deserialize(const std::string &path, comparator<K> comp) {
+template<typename K, typename V, class Comp>
+std::shared_ptr<BPTree<K, V, Comp>> BPTree<K, V, Comp>::deserialize(const std::string &path, Comp comp) {
     FILE *f = bp_tree_utils::fopen(path.c_str(), "r");
     char buf[6];
     bp_tree_utils::fread(buf, 1, 5, f);
@@ -744,40 +754,21 @@ std::shared_ptr<BPTree<K, V>> BPTree<K, V>::deserialize(const std::string &path,
         }
     }
 
-    Node *node = treePtr->getFirstLeaf();
-    K *lastKey = NULL;
-    int count = 0;
-    int s;
-    while (node) {
-        s = node->values.getSize();
-        for (int i = 0; i < s; ++i) {
-            count++;
-            if (lastKey) {
-                const K &key = *lastKey;
-                if (compare(node->keys[i], key, comp) <= 0)
-                    throw std::string("invalid bp tree struct");
-            }
-            lastKey = &(node->keys[i]);
-        }
-        node = node->next;
-    }
-    if (count != size) {
-        throw bp_tree_utils::stringFormat("Wrong size: expected %d but got %d", size, count);
-    }
+    treePtr->recoverLinkList(true);
 
     fclose(f);
     return treePtr;
 }
 
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::deserializeNode(FILE *f, Node *parentNode) {
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::deserializeNode(FILE *f, Node *parentNode) {
     bool leaf = bp_tree_utils::readVal<bool>(f) != 0;
     auto s = bp_tree_utils::readVal<unsigned int>(f);
     if ((parentNode && s < minLoad) || s > order) {
         throw bp_tree_utils::stringFormat("Illegal keys size: size: %d, order: %d(offset: %ld)",
                                           s, order, ftell(f) - sizeof(int));
     }
-    Node *node = new Node(initCap, leaf);
+    Node *node = new Node(initCap, leaf, comp);
     node->parentPtr = parentNode;
     for (int i = 0; i < s; ++i) {
         node->keys.add(bp_tree_utils::readVal<K>(f));
@@ -800,14 +791,14 @@ typename BPTree<K, V>::Node *BPTree<K, V>::deserializeNode(FILE *f, Node *parent
     return node;
 }
 
-template<typename K, typename V>
-BPTree<K, V>::~BPTree() {
+template<typename K, typename V, class Comp>
+BPTree<K, V, Comp>::~BPTree() {
     clear(root);
     delete root;
 }
 
-template<typename K, typename V>
-typename BPTree<K, V>::Node *BPTree<K, V>::getNextSibling(BPTree::Node *node) {
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::getNextSibling(BPTree::Node *node) {
     if (!node) {
         return NULL;
     }
@@ -816,7 +807,7 @@ typename BPTree<K, V>::Node *BPTree<K, V>::getNextSibling(BPTree::Node *node) {
     }
     K &key = node->keys[node->keys.getSize() - 1];
     int pos = node->parentPtr->keys.binaryFind(key);
-    if (pos >= 0 && pos <= node->parentPtr->keys.getSize() && compare(key, node->parentPtr->keys[pos], comp) == 0) {
+    if (pos >= 0 && pos <= node->parentPtr->keys.getSize() && comp(key, node->parentPtr->keys[pos]) == 0) {
         if (pos == node->parentPtr->keys.getSize() - 1) {
             Node *parentSibling = getNextSibling(node->parentPtr);
             if (parentSibling && !parentSibling->childNodePtrs.isEmpty()) {
@@ -832,5 +823,51 @@ typename BPTree<K, V>::Node *BPTree<K, V>::getNextSibling(BPTree::Node *node) {
     throw bp_tree_utils::stringFormat("the structure of the bp tree is not correct");
 }
 
+
+template<typename K, typename V, class Comp>
+void BPTree<K, V, Comp>::recoverLinkList(bool valid) {
+    Node *node = getFirstLeaf();
+    K *lastKey = NULL;
+    int count = 0;
+    int s;
+    while (node) {
+        s = node->values.getSize();
+        for (int i = 0; i < s; ++i) {
+            count++;
+            if (valid) {
+                if (lastKey) {
+                    const K &key = *lastKey;
+                    if (comp(node->keys[i], key) <= 0)
+                        throw std::string("invalid bp tree struct");
+                }
+                lastKey = &(node->keys[i]);
+            }
+        }
+        node = node->next;
+    }
+
+    if (valid && count != size) {
+        throw bp_tree_utils::stringFormat("Wrong size: expected %d but got %d", size, count);
+    }
+}
+
+template<typename K, typename V, class Comp>
+typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::copyNode(Node *parentPtr, Node *fromPtr) {
+    if (!fromPtr) return NULL;
+    Node *newNode = new Node(initCap, fromPtr->leaf, comp);
+    newNode->parentPtr = parentPtr;
+    newNode->keys.add(fromPtr->keys);
+
+    if (fromPtr->leaf) {
+        newNode->values.add(fromPtr->values);
+    } else {
+        auto s = fromPtr->childNodePtrs.getSize();
+        for (unsigned int i = 0; i < s; i++) {
+            newNode->childNodePtrs.add(copyNode(newNode, fromPtr->childNodePtrs[i]));
+        }
+    }
+
+    return newNode;
+}
 
 #endif //BPTREE_BPTREE_H

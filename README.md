@@ -21,21 +21,19 @@ B+树通过插入时分裂，删除时向兄弟节点借关键字或合并兄弟
 ## public API
 
 ``` C++
-template<typename K, typename V>
+template<typename K, typename V, class Comp = DefaultCompare<K>>
 class BPTree {
 private:
-    ...
-
+    ....
 public:
-    // constructor and destructors
-    ...
+
+    // constructors and destructors
+    ....
 
     /**
      * deserialize from a file
      */
-    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path);
-
-    static std::shared_ptr<BPTree<K, V>> deserialize(const std::string &path, comparator<K> comp);
+    static std::shared_ptr<BPTree<K, V, Comp>> deserialize(const std::string &path, Comp comp);
 
     void put(const K &key, const V &value);
 
@@ -48,9 +46,9 @@ public:
 
     bool containsKey(const K &key);
 
-    int getOrder();
+    unsigned int getOrder();
 
-    int getSize();
+    unsigned int getSize();
 
     /**
      * iterate order by key
@@ -80,6 +78,7 @@ public:
      */
     void clear();
 };
+
 ```
 
 ## 重要数据结构
@@ -108,7 +107,7 @@ struct Node {
 };
 ```
 
-**List&lt;T&gt;**：使用定长数组实现的List，比起std::vector&lt;T&gt;功能更简单，效率更高；内存会在移除一定数量元素后减小。
+**List**：使用定长数组实现的List，比起std::vector&lt;T&gt;功能更简单，效率更高；内存会在移除一定数量元素后减小。
 
 ## 序列化
 
@@ -242,6 +241,8 @@ struct Node {
 - 重新插入所有数据，断言所有数据都存在（测试删除是否破坏结构）
 - clear()后断言之前数据都不存在
 - 插入全部数据后，测试遍历方法（key顺序测试）
+- 拷贝后更改原树，断言新树不受影响
+- 测试非基本类型
 
 ### 速度测试
 

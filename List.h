@@ -12,22 +12,26 @@
 
 const static unsigned int MIN_CAP = 1;
 
-template<typename T>
+template<typename T, class Comp = DefaultCompare<T>>
 class List {
 private:
-    const comparator<T> comp;
+    const Comp comp;
     unsigned int cap{};
     unsigned int size = 0;
     T *values;
 
     inline void expandTo(unsigned int cap);
 
+    inline void initAllocate();
+
 public:
-    List() : List(2, NULL) {}
+    List() : List(2) {}
 
-    explicit List(unsigned int cap) : List(cap, NULL) {}
+    explicit List(unsigned int cap) : cap(std::max(MIN_CAP, cap)), comp() {
+        initAllocate();
+    }
 
-    explicit List(unsigned int cap, comparator<T> comp) : cap(std::max(MIN_CAP, cap)), comp(comp) {
+    explicit List(unsigned int cap, Comp comp) : cap(std::max(MIN_CAP, cap)), comp(comp) {
         values = (T *) malloc(byteSize(cap));
         if (!values) {
             throw "cannot malloc";
@@ -59,19 +63,19 @@ public:
 
     void add(const T &value);
 
-    void add(const List<T> &another);
+    void add(const List<T, Comp> &another);
 
-    void add(const List<T> &another, int startIndex);
+    void add(const List<T, Comp> &another, int startIndex);
 
-    void add(const List<T> &another, int startIndex, int endIndex);
+    void add(const List<T, Comp> &another, int startIndex, int endIndex);
 
     void insert(int index, const T &value);
 
-    void insert(int index, const List<T> &another);
+    void insert(int index, const List<T, Comp> &another);
 
     // start: include
     // end: exclude
-    void insert(int index, const List<T> &another, int startIndex, int count);
+    void insert(int index, const List<T, Comp> &another, int startIndex, int count);
 
     void removeAt(int index);
 
@@ -104,23 +108,23 @@ public:
     inline size_t byteSize(unsigned int count);
 };
 
-template<typename T>
-void List<T>::add(const List<T> &another) {
+template<typename T, class Comp>
+void List<T, Comp>::add(const List<T, Comp> &another) {
     insert(size, another);
 }
 
-template<typename T>
-void List<T>::add(const T &value) {
+template<typename T, class Comp>
+void List<T, Comp>::add(const T &value) {
     insert(size, value);
 }
 
-template<typename T>
-void List<T>::add(const List<T> &another, int startIndex, int endIndex) {
+template<typename T, class Comp>
+void List<T, Comp>::add(const List<T, Comp> &another, int startIndex, int endIndex) {
     insert(size, another, startIndex, endIndex);
 }
 
-template<typename T>
-void List<T>::insert(int index, const T &value) {
+template<typename T, class Comp>
+void List<T, Comp>::insert(int index, const T &value) {
     if (size + 1 >= cap) {
         expandTo(cap << 1);
     }
@@ -129,8 +133,8 @@ void List<T>::insert(int index, const T &value) {
     size++;
 }
 
-template<typename T>
-void List<T>::insert(int index, const List<T> &another) {
+template<typename T, class Comp>
+void List<T, Comp>::insert(int index, const List<T, Comp> &another) {
     unsigned int s = size;
     unsigned int cap = this->cap;
     while ((s + another.size) >= cap) {
@@ -143,8 +147,8 @@ void List<T>::insert(int index, const List<T> &another) {
     size += another.size;
 }
 
-template<typename T>
-void List<T>::insert(int index, const List<T> &another, int startIndex, int count) {
+template<typename T, class Comp>
+void List<T, Comp>::insert(int index, const List<T, Comp> &another, int startIndex, int count) {
     if (count <= 0) return;
     another.checkRange(startIndex);
     another.checkRange(startIndex + count - 1);
@@ -160,60 +164,60 @@ void List<T>::insert(int index, const List<T> &another, int startIndex, int coun
     size = s;
 }
 
-template<typename T>
-void List<T>::trimToSize() {
+template<typename T, class Comp>
+void List<T, Comp>::trimToSize() {
     if (cap > size) {
         cap = std::max(size, MIN_CAP);
         values = (T *) realloc(values, byteSize(cap));
     }
 }
 
-template<typename T>
-void List<T>::clear() {
+template<typename T, class Comp>
+void List<T, Comp>::clear() {
     size = 0;
     intelligentTrim();
 }
 
-template<typename T>
-void List<T>::reserve(unsigned int cap) {
-    this->cap = std::min(size, cap);
+template<typename T, class Comp>
+void List<T, Comp>::reserve(unsigned int cap) {
+    this->cap = std::max(std::min(size, cap), MIN_CAP);
     expandTo(cap);
 }
 
-template<typename T>
-bool List<T>::isEmpty() {
+template<typename T, class Comp>
+bool List<T, Comp>::isEmpty() {
     return !size;
 }
 
-template<typename T>
-T &List<T>::get(int index) {
+template<typename T, class Comp>
+T &List<T, Comp>::get(int index) {
     return this->operator[](index);
 }
 
-template<typename T>
-unsigned int List<T>::getSize() const {
+template<typename T, class Comp>
+unsigned int List<T, Comp>::getSize() const {
     return size;
 }
 
-template<typename T>
-void List<T>::checkRange(int index) const {
+template<typename T, class Comp>
+void List<T, Comp>::checkRange(int index) const {
     if (index < 0 || index >= size) {
         throw "index out of size";
     }
 }
 
-template<typename T>
-void List<T>::removeAt(int index) {
+template<typename T, class Comp>
+void List<T, Comp>::removeAt(int index) {
     checkRange(index);
     memmove(values + index, values + index + 1, byteSize(size - index - 1));
     size--;
     intelligentTrim();
 }
 
-template<typename T>
-bool List<T>::remove(T &value) {
+template<typename T, class Comp>
+bool List<T, Comp>::remove(T &value) {
     for (int i = 0; i < size; ++i) {
-        if (compare(values[i], value, comp) == 0) {
+        if (comp(values[i], value) == 0) {
             removeAt(i);
             return true;
         }
@@ -222,8 +226,8 @@ bool List<T>::remove(T &value) {
     return false;
 }
 
-template<typename T>
-void List<T>::set(int index, const T &value) {
+template<typename T, class Comp>
+void List<T, Comp>::set(int index, const T &value) {
     if (index >= 0 && index < size) {
         values[index] = value;
     } else {
@@ -231,8 +235,8 @@ void List<T>::set(int index, const T &value) {
     }
 }
 
-template<typename T>
-void List<T>::expandTo(unsigned int cap) {
+template<typename T, class Comp>
+void List<T, Comp>::expandTo(unsigned int cap) {
     values = (T *) realloc(values, byteSize(cap));
     if (!values) {
         throw "re-alloc failed!";
@@ -240,8 +244,8 @@ void List<T>::expandTo(unsigned int cap) {
     this->cap = cap;
 }
 
-template<typename T>
-void List<T>::removeRange(int start, int count) {
+template<typename T, class Comp>
+void List<T, Comp>::removeRange(int start, int count) {
     int endIndex = start + count - 1;
     if (endIndex < start) {
         return;
@@ -253,30 +257,30 @@ void List<T>::removeRange(int start, int count) {
     intelligentTrim();
 }
 
-template<typename T>
-size_t List<T>::byteSize(unsigned int count) {
+template<typename T, class Comp>
+size_t List<T, Comp>::byteSize(unsigned int count) {
     return count * sizeof(T);
 }
 
-template<typename T>
-T &List<T>::operator[](int index) {
+template<typename T, class Comp>
+T &List<T, Comp>::operator[](int index) {
     checkRange(index);
     return values[index];
 }
 
-template<typename T>
-const T &List<T>::operator[](int index) const {
+template<typename T, class Comp>
+const T &List<T, Comp>::operator[](int index) const {
     checkRange(index);
     return values[index];
 }
 
-template<typename T>
-void List<T>::add(const List<T> &another, int startIndex) {
+template<typename T, class Comp>
+void List<T, Comp>::add(const List<T, Comp> &another, int startIndex) {
     add(another, startIndex, another.size - startIndex);
 }
 
-template<typename T>
-inline int List<T>::binaryFind(const T &val) const {
+template<typename T, class Comp>
+inline int List<T, Comp>::binaryFind(const T &val) const {
     if (!size) {
         return 0;
     }
@@ -289,7 +293,7 @@ inline int List<T>::binaryFind(const T &val) const {
 
     while (low < high) {
         mid = (low + high) >> 1;
-        c = compare(val, values[mid], comp);
+        c = comp(val, values[mid]);
         if (c == 0) {
             toIndex = mid;
             break;
@@ -306,10 +310,18 @@ inline int List<T>::binaryFind(const T &val) const {
     return toIndex;
 }
 
-template<typename T>
-inline void List<T>::intelligentTrim() {
+template<typename T, class Comp>
+inline void List<T, Comp>::intelligentTrim() {
     if (size < (cap >> 1)) {
         trimToSize();
+    }
+}
+
+template<typename T, class Comp>
+void List<T, Comp>::initAllocate() {
+    values = (T *) malloc(byteSize(cap));
+    if (!values) {
+        throw "cannot malloc";
     }
 }
 

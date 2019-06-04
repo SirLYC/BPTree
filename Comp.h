@@ -5,23 +5,16 @@
 #ifndef BPTREE_COMP_H
 #define BPTREE_COMP_H
 
-template<typename K>
-// < 0: less
-// == 0: equal
-// > 0: greater
-using comparator = int (*)(const K &x, const K &y);
-
-template<typename K>
-int compare(const K &x, const K &y, const comparator<K> comp) {
-    if (comp) {
-        return comp(x, y);
-    } else if (x > y) {
-        return 1;
-    } else if (x == y) {
-        return 0;
-    } else {
-        return -1;
+template<typename T>
+struct DefaultCompare {
+    int operator()(const T &x, const T &y) const {
+        if (x > y) {
+            return 1;
+        } else if (x == y) {
+            return 0;
+        } else {
+            return -1;
+        }
     }
-}
-
+};
 #endif //BPTREE_UTILS_H

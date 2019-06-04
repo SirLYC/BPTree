@@ -23,4 +23,21 @@ void testBPTreeSerial(int serialCount);
 template<class Function>
 void runBlock(Function func, const char *msg);
 
+class A {
+public:
+    int a;
+};
+
+struct compareA {
+    int operator()(const A &x, const A &y) const {
+        if (x.a > y.a) {
+            return 1;
+        } else if (x.a == y.a) {
+            return 0;
+        } else {
+            return -1;
+        }
+    }
+};
+
 #endif //BPTREE_TEST_H
