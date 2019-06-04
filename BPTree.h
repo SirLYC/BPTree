@@ -25,7 +25,6 @@ private:
         Node *parentPtr = NULL;
         Node *previous = NULL;
         Node *next = NULL;
-        int initCap;
         bool leaf;
         List<Node *> childNodePtrs;
         List<V> values;
@@ -33,8 +32,6 @@ private:
 
         Node(int initCap, bool leaf);;
     };
-
-    void putInner(const K &key, const V &value);
 
     int order;
     int size;
@@ -86,6 +83,13 @@ public:
             root(new Node(this->initCap,
                           true)) {}
 
+    BPTree(const BPTree &another) {
+        order = another.order;
+        minLoad = another.minLoad;
+        size = another.minLoad;
+
+    }
+
     ~BPTree();
 
     /**
@@ -112,15 +116,23 @@ public:
 
     /**
      * iterate order by key
-     * @param func call func(key, value) for each. func returns true means iteration ends
+     * @param func call func(const K& key, const V& value) for each. func returns true means iteration ends
      */
-    void foreach(biApply<K, V> func);
+    template<typename BiApply>
+    void foreach(BiApply func);
 
-    void foreachReverse(biApply<K, V> func);
+    template<typename BiApply>
+    void foreachReverse(BiApply func);
 
-    void foreachIndex(biApplyIndex<K, V> func);
+    /**
+     * iterate order by key with index (starts from 0)
+     * @param func call func(int index, const K& key, const V& value) for each. func returns true means iteration ends
+     */
+    template<typename BiApplyIndex>
+    void foreachIndex(BiApplyIndex func);
 
-    void foreachIndexReverse(biApplyIndex<K, V> func);
+    template<typename BiApplyIndex>
+    void foreachIndexReverse(BiApplyIndex func);
 
     void serialize(std::string &path);
 
@@ -133,7 +145,6 @@ public:
 
 template<typename K, typename V>
 BPTree<K, V>::Node::Node(int initCap, bool leaf) :
-        initCap(initCap),
         leaf(leaf) {
     childNodePtrs.reserve(initCap);
     if (leaf) {
@@ -149,7 +160,54 @@ const std::string BPTree<K, V>::SUFFIX = ".bpt";
 
 template<typename K, typename V>
 void BPTree<K, V>::put(const K &key, const V &value) {
-    putInner(key, value);
+    bool result;
+    Node *insertNode = root;
+    int pos = -1;
+    while (!insertNode->leaf) {
+        int s = insertNode->childNodePtrs.getSize();
+        List<K> constKeys = insertNode->keys;
+        pos = constKeys.binaryFind(key);
+        if (pos == s) {
+            pos--;
+        }
+        insertNode = insertNode->childNodePtrs[pos];
+    }
+
+    result = putToNode(insertNode, key, &value, NULL);
+    if (result) size++;
+
+    Node *tmp = insertNode->parentPtr;
+    while (tmp) {
+        List<K> &keys = tmp->keys;
+        K oldKey = keys[pos];
+        if (pos >= 0 && pos < keys.getSize() && compare(oldKey, key, comp) < 0) {
+            keys[pos] = key;
+            if (pos == keys.getSize() - 1 && (tmp = tmp->parentPtr)) {
+                pos = tmp->keys.binaryFind(oldKey);
+                continue;
+            }
+        }
+        break;
+    }
+
+    int s = insertNode->keys.getSize();
+    if (result && s > order) {
+        Node *node = insertNode;
+        Node *splitParent;
+        Node *p;
+        do {
+            p = node->parentPtr;
+            splitParent = split(node);
+            if (splitParent != p) {
+                this->root = splitParent;
+                break;
+            } else if (splitParent->keys.getSize() > order) {
+                node = splitParent;
+            } else {
+                break;
+            }
+        } while (true);
+    }
 }
 
 template<typename K, typename V>
@@ -219,58 +277,6 @@ int BPTree<K, V>::getOrder() {
 template<typename K, typename V>
 int BPTree<K, V>::getSize() {
     return size;
-}
-
-template<typename K, typename V>
-void BPTree<K, V>::putInner(const K &key, const V &value) {
-    bool result;
-    Node *insertNode = root;
-    int pos = -1;
-    while (!insertNode->leaf) {
-        int s = insertNode->childNodePtrs.getSize();
-        List<K> constKeys = insertNode->keys;
-        pos = constKeys.binaryFind(key);
-        if (pos == s) {
-            pos--;
-        }
-        insertNode = insertNode->childNodePtrs[pos];
-    }
-
-    result = putToNode(insertNode, key, &value, NULL);
-    if (result) size++;
-
-    Node *tmp = insertNode->parentPtr;
-    while (tmp) {
-        List<K> &keys = tmp->keys;
-        K oldKey = keys[pos];
-        if (pos >= 0 && pos < keys.getSize() && compare(oldKey, key, comp) < 0) {
-            keys[pos] = key;
-            if (pos == keys.getSize() - 1 && (tmp = tmp->parentPtr)) {
-                pos = tmp->keys.binaryFind(oldKey);
-                continue;
-            }
-        }
-        break;
-    }
-
-    int s = insertNode->keys.getSize();
-    if (result && s > order) {
-        Node *node = insertNode;
-        Node *splitParent;
-        Node *p;
-        do {
-            p = node->parentPtr;
-            splitParent = split(node);
-            if (splitParent != p) {
-                this->root = splitParent;
-                break;
-            } else if (splitParent->keys.getSize() > order) {
-                node = splitParent;
-            } else {
-                break;
-            }
-        } while (true);
-    }
 }
 
 template<typename K, typename V>
@@ -535,11 +541,14 @@ bool BPTree<K, V>::containsKey(const K &key) {
 }
 
 template<typename K, typename V>
-void BPTree<K, V>::foreach(biApply<K, V> func) {
+template<class BiApply>
+void BPTree<K, V>::foreach(BiApply func) {
     Node *node = getFirstLeaf();
     while (node) {
         for (int i = 0, s = node->values.getSize(); i < s; ++i) {
-            if (func(node->keys[i], node->values[i])) {
+            const K &constKey = node->keys[i];
+            const V &constValue = node->values[i];
+            if (func(constKey, constValue)) {
                 return;
             }
         }
@@ -548,12 +557,15 @@ void BPTree<K, V>::foreach(biApply<K, V> func) {
 }
 
 template<typename K, typename V>
-void BPTree<K, V>::foreachIndex(biApplyIndex<K, V> func) {
+template<class BiApplyIndex>
+void BPTree<K, V>::foreachIndex(BiApplyIndex func) {
     Node *node = getFirstLeaf();
     int index = 0;
     while (node) {
         for (int i = 0, s = node->values.getSize(); i < s; ++i, index++) {
-            if (func(index, node->keys[i], node->values[i])) {
+            const K &constKey = node->keys[i];
+            const V &constValue = node->values[i];
+            if (func(index, constKey, constValue)) {
                 return;
             }
         }
@@ -581,11 +593,14 @@ typename BPTree<K, V>::Node *BPTree<K, V>::getLastLeaf() {
 }
 
 template<typename K, typename V>
-void BPTree<K, V>::foreachReverse(biApply<K, V> func) {
+template<class BiApply>
+void BPTree<K, V>::foreachReverse(BiApply func) {
     Node *node = getLastLeaf();
     while (node) {
         for (int i = node->values.getSize() - 1; i >= 0; --i) {
-            if (func(node->keys[i], node->values[i])) {
+            const K &constKey = node->keys[i];
+            const V &constValue = node->values[i];
+            if (func(constKey, constValue)) {
                 return;
             }
         }
@@ -594,12 +609,15 @@ void BPTree<K, V>::foreachReverse(biApply<K, V> func) {
 }
 
 template<typename K, typename V>
-void BPTree<K, V>::foreachIndexReverse(biApplyIndex<K, V> func) {
+template<class BiApplyIndex>
+void BPTree<K, V>::foreachIndexReverse(BiApplyIndex func) {
     Node *node = getLastLeaf();
     int index = size - 1;
     while (node) {
         for (int i = node->values.getSize() - 1; i >= 0; --i, --index) {
-            if (func(index, node->keys[i], node->values[i])) {
+            const K &constKey = node->keys[i];
+            const V &constValue = node->values[i];
+            if (func(index, constKey, constValue)) {
                 return;
             }
         }
