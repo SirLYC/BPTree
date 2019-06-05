@@ -9,8 +9,8 @@
 #include <cerrno>
 #include <string>
 
-static int test = 1;
-static bool isMachineLittleEndian = *((char *) &test) == 1;
+static const int TEST_ENDIAN_VAL = 1;
+static const bool IS_MACHINE_LITTLE_ENDIAN = *((char *) &TEST_ENDIAN_VAL) == 1;
 
 // all file io is in little-endian
 namespace bp_tree_utils {
@@ -24,14 +24,12 @@ namespace bp_tree_utils {
     }
 
     inline void changeEndian(void *ptr, size_t size, size_t nitems) {
-        if (!isMachineLittleEndian) {
-            auto valPtr = (unsigned char *) ptr;
-            for (size_t i = 0; i < nitems; ++i) {
-                for (size_t j = 0, k = size - 1; j < k; ++j, --k) {
-                    unsigned char b = valPtr[i * size + j];
-                    valPtr[i * size + j] = valPtr[i * size + k];
-                    valPtr[i * size + k] = b;
-                }
+        auto valPtr = (unsigned char *) ptr;
+        for (size_t i = 0; i < nitems; ++i) {
+            for (size_t j = 0, k = size - 1; j < k; ++j, --k) {
+                unsigned char b = valPtr[i * size + j];
+                valPtr[i * size + j] = valPtr[i * size + k];
+                valPtr[i * size + k] = b;
             }
         }
     }
@@ -49,7 +47,6 @@ namespace bp_tree_utils {
         if (std::fread(ptr, size, nitems, stream) != nitems) {
             throw std::string("Read from file failed");
         }
-        changeEndian(ptr, size, nitems);
     }
 
 
@@ -59,15 +56,37 @@ namespace bp_tree_utils {
     }
 
     template<typename T>
-    void writeValLittle(T val, FILE *stream) {
-        changeEndian(&val, sizeof(T), 1);
-        bp_tree_utils::fwrite(&val, sizeof(T), 1, stream);
+    void writeValLittle(const T &val, FILE *stream) {
+        if (IS_MACHINE_LITTLE_ENDIAN) {
+            bp_tree_utils::fwrite(&val, sizeof(T), 1, stream);
+        } else {
+            unsigned char ptr[sizeof(T)];
+            memcpy(ptr, &val, sizeof(T));
+            changeEndian(ptr, sizeof(T), 1);
+            bp_tree_utils::fwrite(&ptr, 1, sizeof(T), stream);
+        }
     }
 
     template<typename T>
-    void writeArrayLittle(T *arr, size_t length, FILE *stream) {
-        changeEndian(arr, sizeof(T), length);
-        bp_tree_utils::fwrite(arr, sizeof(T), length, stream);
+    void writeArrayLittle(const T *arr, size_t length, FILE *stream) {
+        if (IS_MACHINE_LITTLE_ENDIAN) {
+            bp_tree_utils::fwrite(arr, sizeof(T), length, stream);
+        } else {
+            std::unique_ptr<unsigned char[]> ptr(new unsigned char[sizeof(T) * length]);
+            memcpy(ptr.get(), arr, sizeof(T) * length);
+            changeEndian(ptr.get(), sizeof(T), length);
+            bp_tree_utils::fwrite(ptr.get(), 1, sizeof(T) * length, stream);
+        }
+    }
+
+    template<typename T>
+    T readValLittle(FILE *stream) {
+        T val;
+        bp_tree_utils::fread(&val, sizeof(T), 1, stream);
+        if (!IS_MACHINE_LITTLE_ENDIAN) {
+            changeEndian(&val, sizeof(T), 1);
+        }
+        return val;
     }
 
     template<typename T>
@@ -85,11 +104,6 @@ namespace bp_tree_utils {
         std::unique_ptr<char[]> buf(new char[size]);
         snprintf(buf.get(), static_cast<size_t>(size), format.c_str(), args ...);
         return std::string(buf.get(), buf.get() + size - 1);
-    }
-
-    inline bool isLittleEndiant() {
-        int test = 1;
-        return *((char *) &test) == 1;
     }
 }
 

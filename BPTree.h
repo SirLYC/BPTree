@@ -71,10 +71,10 @@ private:
 public:
 
     explicit BPTree(unsigned int order) :
-            comp(),
             order(std::max(MIN_ORDER, order)),
             size(0),
             minLoad((this->order + 1) / 2),
+            comp(),
             initCap(std::max(std::min(this->order,
                                       initCap), this->minLoad)),
             root(new Node(this->initCap,
@@ -86,18 +86,18 @@ public:
             order(std::max(MIN_ORDER, order)),
             size(0),
             minLoad((this->order + 1) / 2),
+            comp(comp),
             initCap(std::max(std::min(this->order,
                                       initCap), this->minLoad)),
-            comp(comp),
             root(new Node(this->initCap,
                           true, comp)) {}
 
     BPTree(const BPTree &another) :
             order(another.order),
-            minLoad(another.minLoad),
             size(another.size),
-            initCap(another.initCap),
-            comp(another.comp) {
+            minLoad(another.minLoad),
+            comp(another.comp),
+            initCap(another.initCap) {
         root = copyNode(NULL, another.root);
         recoverLinkList(false);
     }
@@ -712,28 +712,28 @@ std::shared_ptr<BPTree<K, V, Comp>> BPTree<K, V, Comp>::deserialize(const std::s
     if (buf[0] != sizeof(short) || buf[1] != sizeof(unsigned int) || buf[2] != sizeof(long)) {
         throw std::string("this file is not compatible with machine");
     }
-    auto sizeofK = bp_tree_utils::readVal<unsigned int>(f);
+    auto sizeofK = bp_tree_utils::readValLittle<unsigned int>(f);
     if (sizeofK < sizeof(K)) {
         throw bp_tree_utils::stringFormat("Wrong sizeof(K): expected %d but got %d (offset: 8)", sizeof(K), sizeofK);
     }
 
-    auto sizeofV = bp_tree_utils::readVal<unsigned int>(f);
+    auto sizeofV = bp_tree_utils::readValLittle<unsigned int>(f);
     if (sizeofV != sizeof(V)) {
         throw bp_tree_utils::stringFormat("Wrong sizeof(V): expected %d but got %d (offset: 12)", sizeof(V), sizeofV);
     }
 
 
-    auto order = bp_tree_utils::readVal<unsigned int>(f);
+    auto order = bp_tree_utils::readValLittle<unsigned int>(f);
     if (order < 2) {
         throw bp_tree_utils::stringFormat("Wrong order: %d (offset: 16)", order);
     }
 
-    auto initCap = bp_tree_utils::readVal<unsigned int>(f);
+    auto initCap = bp_tree_utils::readValLittle<unsigned int>(f);
     if (initCap > order) {
         throw bp_tree_utils::stringFormat("Wrong initCap: %d (offset: 20)", initCap);
     }
 
-    auto size = bp_tree_utils::readVal<unsigned int>(f);
+    auto size = bp_tree_utils::readValLittle<unsigned int>(f);
     if (size < 0) {
         throw bp_tree_utils::stringFormat("Wrong size: %d (offset: 24)", initCap);
     }
@@ -762,8 +762,8 @@ std::shared_ptr<BPTree<K, V, Comp>> BPTree<K, V, Comp>::deserialize(const std::s
 
 template<typename K, typename V, class Comp>
 typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::deserializeNode(FILE *f, Node *parentNode) {
-    bool leaf = bp_tree_utils::readVal<bool>(f) != 0;
-    auto s = bp_tree_utils::readVal<unsigned int>(f);
+    bool leaf = bp_tree_utils::readValLittle<bool>(f) != 0;
+    auto s = bp_tree_utils::readValLittle<unsigned int>(f);
     if ((parentNode && s < minLoad) || s > order) {
         throw bp_tree_utils::stringFormat("Illegal keys size: size: %d, order: %d(offset: %ld)",
                                           s, order, ftell(f) - sizeof(int));
@@ -771,16 +771,16 @@ typename BPTree<K, V, Comp>::Node *BPTree<K, V, Comp>::deserializeNode(FILE *f, 
     Node *node = new Node(initCap, leaf, comp);
     node->parentPtr = parentNode;
     for (int i = 0; i < s; ++i) {
-        node->keys.add(bp_tree_utils::readVal<K>(f));
+        node->keys.add(bp_tree_utils::readValLittle<K>(f));
     }
     if (leaf) {
         for (int i = 0; i < s; ++i) {
-            node->values.add(bp_tree_utils::readVal<V>(f));
+            node->values.add(bp_tree_utils::readValLittle<V>(f));
         }
     } else {
         long offset;
         for (int i = 0; i < s; ++i) {
-            long childOffset = bp_tree_utils::readVal<long>(f);
+            long childOffset = bp_tree_utils::readValLittle<long>(f);
             offset = ftell(f);
             fseek(f, childOffset, SEEK_SET);
             node->childNodePtrs.add(deserializeNode(f, node));

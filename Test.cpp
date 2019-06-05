@@ -462,13 +462,18 @@ void testBPTreeMemory() {
 
 
 void testBPTreeSerial(int serialCount) {
-    printf("**Start serial test. Count = %d\n", serialCount);
+    printf("***Start serial test. Count = %d\n", serialCount);
     srand(static_cast<unsigned int>(time(nullptr)));
-    int *arr = new int[serialCount];
+    unique_ptr<int[]> arr(new int[serialCount]);
     for (int i = 0; i < serialCount; ++i) {
         arr[i] = i;
     }
-    qsort(arr, static_cast<size_t>(serialCount), sizeof(int), randomComp);
+
+    for (int i = serialCount / 3, j = serialCount * 2 / 3; i < j; i++, j--) {
+        int tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+    }
 
     BPTree<int, int> tree(20);
     for (int i = 0; i < serialCount; ++i) {
@@ -497,7 +502,7 @@ void testBPTreeSerial(int serialCount) {
         assert(*(dTreePtr->get(arr[i])) == i);
     }
     remove("test.bpt");
-    printf("**End serial test.\n");
+    printf("***End serial test.\n");
 }
 
 template<class Function>

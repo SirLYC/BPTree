@@ -15,8 +15,8 @@ const static unsigned int MIN_CAP = 1;
 template<typename T, class Comp = DefaultCompare<T>>
 class List {
 private:
-    const Comp comp;
     unsigned int cap{};
+    const Comp comp;
     unsigned int size = 0;
     T *values;
 
@@ -38,7 +38,7 @@ public:
         }
     }
 
-    List(List &list) : comp(list.comp), cap(list.cap), size(list.size) {
+    List(List &list) : cap(list.cap), comp(list.comp), size(list.size) {
         values = (T *) malloc(byteSize(cap));
         if (!values) {
             throw "cannot malloc";
